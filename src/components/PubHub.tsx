@@ -20,7 +20,7 @@ import {
   Legend
 } from "recharts";
 import { Pub, UserProfile, BeerLog, PubChatMessage } from "../types";
-import { getMostDrankBeerForUser } from "../utils";
+import { getMostDrankBeerForUser, isImposterLog } from "../utils";
 import UserAvatar from "./UserAvatar";
 
 interface PubHubProps {
@@ -74,7 +74,7 @@ function PubChatSection({
   const [inputText, setInputText] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const messagesEndRef = React.useRef<HTMLDivElement | null>(null);
+  const chatContainerRef = React.useRef<HTMLDivElement | null>(null);
 
   const fetchMessages = async () => {
     if (!pubId) return;
@@ -105,7 +105,9 @@ function PubChatSection({
   }, [pubId, messageRefreshKey]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
   }, [messages.length]);
 
   const handleSendMessage = async (e?: React.FormEvent, customText?: string) => {
@@ -139,23 +141,23 @@ function PubChatSection({
   };
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
+    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs p-4 sm:p-5 space-y-4">
       {/* Chat Header */}
-      <div className="border-b border-slate-100 pb-3 flex justify-between items-center">
+      <div className="border-b border-slate-100 dark:border-slate-800 pb-3 flex justify-between items-center">
         <div>
-          <h3 className="text-sm font-extrabold text-slate-800 tracking-tight flex items-center gap-1.5">
+          <h3 className="text-xs sm:text-sm font-extrabold text-slate-800 dark:text-slate-100 tracking-tight flex items-center gap-1.5">
             <MessageSquare className="w-4 h-4 text-amber-500" />
             {pubName} Banter & Chat
           </h3>
-          <p className="text-[11px] text-slate-400 mt-0.5">Live member chat & session banter</p>
+          <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5">Live member chat & session banter</p>
         </div>
-        <span className="text-[10px] text-amber-600 font-extrabold bg-amber-50 border border-amber-200/60 px-2.5 py-1 rounded-full uppercase tracking-wider flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live Pub Chat
+        <span className="text-[9px] sm:text-[10px] text-amber-600 dark:text-amber-400 font-extrabold bg-amber-50 dark:bg-amber-500/10 border border-amber-200/60 dark:border-amber-500/20 px-2.5 py-1 rounded-full uppercase tracking-wider flex items-center gap-1 shrink-0">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live
         </span>
       </div>
 
       {/* Messages List Area */}
-      <div className="bg-slate-900 rounded-xl p-4 min-h-[220px] max-h-[380px] overflow-y-auto space-y-3 border border-slate-800">
+      <div ref={chatContainerRef} className="bg-slate-950 rounded-xl p-3.5 sm:p-4 min-h-[200px] max-h-[340px] overflow-y-auto space-y-3 border border-slate-800 custom-scrollbar">
         {loading ? (
           <div className="py-12 text-center text-slate-500 text-xs italic">Loading pub chat...</div>
         ) : messages.length === 0 ? (
@@ -179,7 +181,7 @@ function PubChatSection({
                   className="cursor-pointer shrink-0 mt-0.5"
                   onClick={() => onViewProfileRequested?.(msg.user)}
                 >
-                  <UserAvatar username={msg.user} users={users} className="w-8 h-8 text-xs" />
+                  <UserAvatar username={msg.user} users={users} className="w-7 h-7 sm:w-8 sm:h-8 text-xs" />
                 </div>
 
                 <div className={`max-w-[85%] space-y-1 ${isMe ? "items-end text-right" : "items-start"}`}>
@@ -196,7 +198,7 @@ function PubChatSection({
                   </div>
 
                   <div
-                    className={`px-3.5 py-2.5 rounded-2xl text-sm font-semibold leading-relaxed break-words shadow-xs ${
+                    className={`px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-2xl text-xs sm:text-sm font-semibold leading-relaxed break-words shadow-xs ${
                       isMe
                         ? "bg-amber-500 text-slate-950 rounded-tr-none"
                         : "bg-slate-800/90 text-slate-100 border border-slate-700/80 rounded-tl-none"
@@ -209,7 +211,6 @@ function PubChatSection({
             );
           })
         )}
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Input Box */}
@@ -219,15 +220,15 @@ function PubChatSection({
           value={inputText}
           onChange={e => setInputText(e.target.value)}
           placeholder={`Say something in ${pubName}...`}
-          className="flex-1 bg-slate-50 border border-slate-200 focus:border-amber-500 focus:bg-white text-slate-900 rounded-xl px-4 py-2.5 text-sm font-medium outline-hidden transition-all placeholder:text-slate-400"
+          className="flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-amber-500 focus:bg-white dark:focus:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-medium outline-hidden transition-all placeholder:text-slate-400"
         />
         <button
           type="submit"
           disabled={!inputText.trim() || sending}
-          className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-xs transition-all flex items-center gap-1.5 shrink-0 cursor-pointer active:scale-95"
+          className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-xs transition-all flex items-center gap-1.5 shrink-0 cursor-pointer active:scale-95 min-h-[40px]"
         >
           <Send className="w-3.5 h-3.5" />
-          Send
+          <span className="hidden sm:inline">Send</span>
         </button>
       </form>
     </div>
@@ -325,26 +326,32 @@ export default function PubHub({
   const [additionalInvitees, setAdditionalInvitees] = useState<string[]>([]);
 
   // Rally launch station state
-  const [showRallyStation, setShowRallyStation] = useState(false);
+  const [showBeaconModal, setShowBeaconModal] = useState(false);
+  const [beaconBarName, setBeaconBarName] = useState("");
+  const [beaconError, setBeaconError] = useState("");
   const [rallySending, setRallySending] = useState(false);
-  const [rallySentNotice, setRallySentNotice] = useState(false);
+  const [rallySentNotice, setRallySentNotice] = useState<string | null>(null);
   const [chatRefreshKey, setChatRefreshKey] = useState(0);
 
-  const handleTriggerRally = async (pubId: string) => {
-    if (rallySending) return;
+  const handleTriggerRally = async (pubId: string, barName: string) => {
+    const trimmedBar = barName.trim();
+    if (rallySending || !trimmedBar) return;
     setRallySending(true);
     try {
       const pubName = activePub?.name || "the Pub";
-      const rallyText = `🔥 THE BEACONS ARE LIT! 🔥 @${currentUser} has lit the beacons for @${pubName}! Pints call for aid! Who will answer? 🍺⚔️🏃‍♂️💨`;
+      const rallyText = `🔥 THE BEACONS ARE LIT AT ${trimmedBar.toUpperCase()}! 🔥 @${currentUser} has lit the beacons at ${trimmedBar} for @${pubName}! Pints call for aid! Who will answer? 🍺⚔️🏃‍♂️💨`;
       const res = await fetch(`/api/pubs/${encodeURIComponent(pubId)}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user: currentUser, username: currentUser, text: rallyText })
       });
       if (res.ok) {
-        setRallySentNotice(true);
+        setRallySentNotice(trimmedBar);
+        setShowBeaconModal(false);
+        setBeaconBarName("");
+        setBeaconError("");
         setChatRefreshKey(prev => prev + 1);
-        setTimeout(() => setRallySentNotice(false), 5000);
+        setTimeout(() => setRallySentNotice(null), 6000);
       }
     } catch (e) {
       console.error("Failed to trigger pub rally:", e);
@@ -353,40 +360,58 @@ export default function PubHub({
     }
   };
 
-  // Derived pub state
-  const myPubs = useMemo(() => pubs.filter(p => p.members.includes(currentUser)), [pubs, currentUser]);
-  const myInvites = useMemo(() => pubs.filter(p => p.invited.includes(currentUser)), [pubs, currentUser]);
-  const otherPubs = useMemo(() => pubs.filter(p => !p.members.includes(currentUser)), [pubs, currentUser]);
-  const otherUsers = useMemo(() => users.filter(u => u.username !== currentUser), [users, currentUser]);
+  const userLower = useMemo(() => (currentUser || "").toLowerCase().trim(), [currentUser]);
 
-  // Default pub ID if no specific selection is active (strictly from joined pubs)
+  // Derived pub state
+  const myPubs = useMemo(() => pubs.filter(p => p.members.some(m => m.toLowerCase().trim() === userLower)), [pubs, userLower]);
+  const myInvites = useMemo(() => pubs.filter(p => p.invited.some(m => m.toLowerCase().trim() === userLower)), [pubs, userLower]);
+  const otherPubs = useMemo(() => pubs.filter(p => !p.members.some(m => m.toLowerCase().trim() === userLower)), [pubs, userLower]);
+  const otherUsers = useMemo(() => users.filter(u => u.username.toLowerCase().trim() !== userLower), [users, userLower]);
+
+  // Default pub ID if no specific selection is active
   const defaultPubId = useMemo(() => {
-    if (pinnedPubId && myPubs.some(p => p.id === pinnedPubId)) {
+    if (pinnedPubId && pubs.some(p => p.id === pinnedPubId)) {
       return pinnedPubId;
     }
     if (myPubs.length > 0) {
       return myPubs[0].id;
     }
+    if (pubs.length > 0) {
+      return pubs[0].id;
+    }
     return "";
-  }, [pinnedPubId, myPubs]);
+  }, [pinnedPubId, myPubs, pubs]);
 
   // Local selection override state
   const [localPubId, setLocalPubId] = useState<string | null>(null);
+  
+  // Mobile-first active tab state: "chat" | "superlatives" | "gauge"
+  const [activeTab, setActiveTab] = useState<"chat" | "superlatives" | "gauge">("chat");
 
-  // Active Pub ID (strictly from joined pubs)
+  // Current week number for weekly rotating superlatives
+  const currentWeekNum = useMemo(() => {
+    const d = new Date();
+    const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const dayNum = date.getUTCDay() || 7;
+    date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+    return Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  }, []);
+
+  // Active Pub ID
   const activePubId = useMemo(() => {
-    if (localPubId && myPubs.some(p => p.id === localPubId)) {
+    if (localPubId && pubs.some(p => p.id === localPubId)) {
       return localPubId;
     }
-    if (selectedPubId && myPubs.some(p => p.id === selectedPubId)) {
+    if (selectedPubId && pubs.some(p => p.id === selectedPubId)) {
       return selectedPubId;
     }
     return defaultPubId;
-  }, [localPubId, selectedPubId, myPubs, defaultPubId]);
+  }, [localPubId, selectedPubId, pubs, defaultPubId]);
 
   const activePub = useMemo(() => {
-    return myPubs.find(p => p.id === activePubId);
-  }, [myPubs, activePubId]);
+    return pubs.find(p => p.id === activePubId);
+  }, [pubs, activePubId]);
 
   const handleSelectPub = (id: string) => {
     setLocalPubId(id);
@@ -619,7 +644,7 @@ export default function PubHub({
   const activePubFilteredLogs = useMemo(() => {
     if (!activePub) return [];
     const members = activePub.members;
-    return combinedLogs.filter(log => members.includes(log.user));
+    return combinedLogs.filter(log => members.includes(log.user) && !isImposterLog(log));
   }, [activePub, combinedLogs]);
 
   // Leaderboard ranking
@@ -660,7 +685,7 @@ export default function PubHub({
     });
   }, [activePubFilteredLogs, superlativeTimeframe]);
 
-  // Dynamic Superlatives Computation
+  // Dynamic Superlatives Computation with Weekly Rotation
   const pubSuperlatives = useMemo(() => {
     const members = activeMembers;
     if (members.length === 0) return null;
@@ -670,6 +695,7 @@ export default function PubHub({
       const activeDates = new Set<string>();
       let totalDarts = 0;
       let lateNightCount = 0;
+      let earlyCount = 0;
       let maxAbv = 0;
       let maxAbvBeer = "";
       let ratedLogsCount = 0;
@@ -677,15 +703,29 @@ export default function PubHub({
       let guinnessCount = 0;
       let cheersReceived = 0;
       const uniqueBeersSet = new Set<string>();
+      const beerCounts: Record<string, number> = {};
+      let topBeerName = "";
+      let topBeerCount = 0;
 
       mLogs.forEach(log => {
-        if (log.beerName) uniqueBeersSet.add(log.beerName.trim().toLowerCase());
+        if (log.beerName) {
+          const bName = log.beerName.trim();
+          if (bName) {
+            uniqueBeersSet.add(bName.toLowerCase());
+            beerCounts[bName] = (beerCounts[bName] || 0) + 1;
+            if (beerCounts[bName] > topBeerCount) {
+              topBeerCount = beerCounts[bName];
+              topBeerName = bName;
+            }
+          }
+        }
         try {
           const d = new Date(log.date);
           if (!isNaN(d.getTime())) {
             activeDates.add(d.toISOString().split("T")[0]);
             const hour = d.getHours();
             if (hour >= 22 || hour < 5) lateNightCount++;
+            if (hour >= 10 && hour < 15) earlyCount++;
           }
         } catch (e) {}
 
@@ -716,148 +756,208 @@ export default function PubHub({
         username: member,
         totalPints: mLogs.length,
         soberDays,
+        activeDaysCount: activeDates.size,
         totalDarts,
         lateNightCount,
+        earlyCount,
         maxAbv,
         maxAbvBeer,
         guinnessCount,
         cheersReceived,
         uniqueBeersCount: uniqueBeersSet.size,
+        topBeerCount,
+        topBeerName,
         avgRating: ratedLogsCount > 0 ? parseFloat((sumRating / ratedLogsCount).toFixed(1)) : 0
       };
     });
 
     const candidates = [
       {
-        id: "regular",
-        title: "Pub Regular 👑",
+        id: "landlord",
+        title: "Stool Squatter 👑",
+        tagline: "Claimed squatter's rights on Bar Stool #1",
         winner: [...memberStats].filter((m) => m.totalPints > 0).sort((a, b) => b.totalPints - a.totalPints)[0],
-        getStatText: (w: typeof memberStats[0]) => `${w.totalPints} ${w.totalPints === 1 ? "pint" : "pints"} poured`,
+        getStatText: (w: typeof memberStats[0]) => `Poured ${w.totalPints} pints. Mail routed to the bar.`,
         getScore: (w: typeof memberStats[0]) => (w ? 100 + w.totalPints : 0),
-        cardClass: "bg-amber-50/70 dark:bg-amber-500/10 border-amber-200/80 dark:border-amber-500/30",
-        titleClass: "text-amber-800 dark:text-amber-300",
-        badgeClass: "text-amber-900/80 dark:text-amber-300/80",
+        cardClass: "bg-amber-500/10 dark:bg-amber-500/15 border-amber-500/30",
+        titleClass: "text-amber-900 dark:text-amber-300",
+        badgeClass: "text-slate-800 dark:text-slate-200",
         IconComponent: Crown,
         iconClass: "text-amber-600 dark:text-amber-400",
-        noStatText: "No pours in period",
+        noStatText: "No pours logged yet",
       },
       {
-        id: "guinness",
-        title: "Dark Arts Master ☘️",
-        winner: [...memberStats].filter((m) => m.guinnessCount > 0).sort((a, b) => b.guinnessCount - a.guinnessCount)[0],
-        getStatText: (w: typeof memberStats[0]) => `${w.guinnessCount} Stout ${w.guinnessCount === 1 ? "pint" : "pints"}`,
-        getScore: (w: typeof memberStats[0]) => (w ? 90 + w.guinnessCount * 3 : 0),
-        cardClass: "bg-slate-900 text-slate-100 border-slate-800",
-        titleClass: "text-amber-300",
-        badgeClass: "text-slate-400",
-        IconComponent: Beer,
-        iconClass: "text-amber-400",
-        noStatText: "No stout logs",
-      },
-      {
-        id: "nightowl",
-        title: "Night Owl 🦉",
+        id: "nocturnal",
+        title: "Nocturnal Gremlin 👹",
+        tagline: "Sunlight is a myth, drinks strictly after dark",
         winner: [...memberStats].filter((m) => m.lateNightCount > 0).sort((a, b) => b.lateNightCount - a.lateNightCount)[0],
-        getStatText: (w: typeof memberStats[0]) => `${w.lateNightCount} late night check-ins`,
-        getScore: (w: typeof memberStats[0]) => (w ? 85 + w.lateNightCount * 4 : 0),
-        cardClass: "bg-purple-50/70 dark:bg-purple-900/20 border-purple-200/80 dark:border-purple-800/40",
-        titleClass: "text-purple-800 dark:text-purple-300",
-        badgeClass: "text-purple-900/80 dark:text-purple-300/80",
+        getStatText: (w: typeof memberStats[0]) => `${w.lateNightCount} check-ins past 11 PM. Sleep is for tomorrow.`,
+        getScore: (w: typeof memberStats[0]) => (w ? 95 + w.lateNightCount * 4 : 0),
+        cardClass: "bg-purple-500/10 dark:bg-purple-950/30 border-purple-500/30",
+        titleClass: "text-purple-900 dark:text-purple-300",
+        badgeClass: "text-purple-800 dark:text-purple-200",
         IconComponent: Moon,
         iconClass: "text-purple-600 dark:text-purple-400",
         noStatText: "No late night logs",
       },
       {
-        id: "highvoltage",
-        title: "High Voltage ⚡",
+        id: "rocketfuel",
+        title: "Rocket Fuel Fiend 🚀",
+        tagline: "Treats 10%+ ABV like light tap water",
         winner: [...memberStats].filter((m) => m.maxAbv > 0).sort((a, b) => b.maxAbv - a.maxAbv)[0],
-        getStatText: (w: typeof memberStats[0]) => `${w.maxAbv}% ABV (${w.maxAbvBeer})`,
-        getScore: (w: typeof memberStats[0]) => (w ? 80 + w.maxAbv * 2 : 0),
-        cardClass: "bg-rose-50/70 dark:bg-rose-950/20 border-rose-200/80 dark:border-rose-900/40",
-        titleClass: "text-rose-700 dark:text-rose-300",
-        badgeClass: "text-rose-800 dark:text-rose-300",
+        getStatText: (w: typeof memberStats[0]) => `${w.maxAbv}% ABV (${w.maxAbvBeer}). Call them an Uber.`,
+        getScore: (w: typeof memberStats[0]) => (w ? 90 + w.maxAbv * 2 : 0),
+        cardClass: "bg-rose-500/10 dark:bg-rose-950/30 border-rose-500/30",
+        titleClass: "text-rose-900 dark:text-rose-300",
+        badgeClass: "text-rose-800 dark:text-rose-200",
         IconComponent: Zap,
         iconClass: "text-rose-500",
         noStatText: "No high ABV logs",
       },
       {
-        id: "toastmaster",
-        title: "Toastmaster 🥂",
+        id: "stoutsiren",
+        title: "Liquid Velvet Siren ☘️",
+        tagline: "Blood type is currently 98% Guinness foam",
+        winner: [...memberStats].filter((m) => m.guinnessCount > 0).sort((a, b) => b.guinnessCount - a.guinnessCount)[0],
+        getStatText: (w: typeof memberStats[0]) => `${w.guinnessCount} creamy stouts. Moustache permanently stained.`,
+        getScore: (w: typeof memberStats[0]) => (w ? 85 + w.guinnessCount * 3 : 0),
+        cardClass: "bg-slate-900 dark:bg-slate-950 border-slate-700 text-slate-100",
+        titleClass: "text-amber-400",
+        badgeClass: "text-slate-300",
+        IconComponent: Beer,
+        iconClass: "text-amber-400",
+        noStatText: "No stout logs",
+      },
+      {
+        id: "dartgoblin",
+        title: "Back Patio Goblin 🎯",
+        tagline: "Always 'stepping out for a quick sec'",
+        winner: [...memberStats].filter((m) => m.totalDarts > 0).sort((a, b) => b.totalDarts - a.totalDarts)[0],
+        getStatText: (w: typeof memberStats[0]) => `${w.totalDarts} dart & smoke breaks. Patio MVP.`,
+        getScore: (w: typeof memberStats[0]) => (w ? 80 + w.totalDarts * 3 : 0),
+        cardClass: "bg-emerald-500/10 dark:bg-emerald-950/30 border-emerald-500/30",
+        titleClass: "text-emerald-900 dark:text-emerald-300",
+        badgeClass: "text-emerald-800 dark:text-emerald-200",
+        IconComponent: Coffee,
+        iconClass: "text-emerald-600 dark:text-emerald-400",
+        noStatText: "No dart/cigar logs",
+      },
+      {
+        id: "hypebeast",
+        title: "Clinking Monarch 🥂",
+        tagline: "Distributing cheers like candy at Christmas",
         winner: [...memberStats].filter((m) => m.cheersReceived > 0).sort((a, b) => b.cheersReceived - a.cheersReceived)[0],
-        getStatText: (w: typeof memberStats[0]) => `${w.cheersReceived} cheers received`,
-        getScore: (w: typeof memberStats[0]) => (w ? 75 + w.cheersReceived * 2 : 0),
-        cardClass: "bg-sky-50/70 dark:bg-sky-950/20 border-sky-200/80 dark:border-sky-900/40",
-        titleClass: "text-sky-800 dark:text-sky-300",
-        badgeClass: "text-sky-900/80 dark:text-sky-300/80",
+        getStatText: (w: typeof memberStats[0]) => `${w.cheersReceived} cheers collected. Unofficial pub mayor.`,
+        getScore: (w: typeof memberStats[0]) => (w ? 78 + w.cheersReceived * 2 : 0),
+        cardClass: "bg-sky-500/10 dark:bg-sky-950/30 border-sky-500/30",
+        titleClass: "text-sky-900 dark:text-sky-300",
+        badgeClass: "text-sky-800 dark:text-sky-200",
         IconComponent: Trophy,
         iconClass: "text-sky-600 dark:text-sky-400",
         noStatText: "No cheers received",
       },
       {
-        id: "explorer",
-        title: "Craft Explorer 🧭",
+        id: "roulette",
+        title: "Tastebud Roulette 🧭",
+        tagline: "Refuses to order the same beer twice",
         winner: [...memberStats].filter((m) => m.uniqueBeersCount > 0).sort((a, b) => b.uniqueBeersCount - a.uniqueBeersCount)[0],
-        getStatText: (w: typeof memberStats[0]) => `${w.uniqueBeersCount} unique beers tried`,
-        getScore: (w: typeof memberStats[0]) => (w ? 70 + w.uniqueBeersCount * 2 : 0),
-        cardClass: "bg-indigo-50/70 dark:bg-indigo-950/20 border-indigo-200/80 dark:border-indigo-900/40",
-        titleClass: "text-indigo-800 dark:text-indigo-300",
-        badgeClass: "text-indigo-900/80 dark:text-indigo-300/80",
+        getStatText: (w: typeof memberStats[0]) => `${w.uniqueBeersCount} wild brew varieties logged.`,
+        getScore: (w: typeof memberStats[0]) => (w ? 75 + w.uniqueBeersCount * 2 : 0),
+        cardClass: "bg-indigo-500/10 dark:bg-indigo-950/30 border-indigo-500/30",
+        titleClass: "text-indigo-900 dark:text-indigo-300",
+        badgeClass: "text-indigo-800 dark:text-indigo-200",
         IconComponent: Sparkles,
         iconClass: "text-indigo-600 dark:text-indigo-400",
-        noStatText: "No unique beers",
+        noStatText: "No unique beers logged",
       },
       {
-        id: "tastemaker",
-        title: "The Tastemaker ⭐",
-        winner: [...memberStats].filter((m) => m.avgRating > 0).sort((a, b) => b.avgRating - a.avgRating)[0],
-        getStatText: (w: typeof memberStats[0]) => `${w.avgRating} / 5.0 avg rating`,
-        getScore: (w: typeof memberStats[0]) => (w ? 65 + w.avgRating * 4 : 0),
-        cardClass: "bg-amber-50/50 dark:bg-amber-950/20 border-amber-200/70 dark:border-amber-900/40",
-        titleClass: "text-amber-700 dark:text-amber-300",
-        badgeClass: "text-amber-900/80 dark:text-amber-300/80",
+        id: "ramsay",
+        title: "Gordon Ramsay of Drafts 🥸",
+        tagline: "Gave 2 stars because foam wasn't symmetrical",
+        winner: [...memberStats].filter((m) => m.avgRating > 0 && m.totalPints >= 1).sort((a, b) => a.avgRating - b.avgRating)[0],
+        getStatText: (w: typeof memberStats[0]) => `Brutal ${w.avgRating} / 5.0 avg rating. Tough critic!`,
+        getScore: (w: typeof memberStats[0]) => (w ? 72 + (5 - w.avgRating) * 5 : 0),
+        cardClass: "bg-amber-500/10 dark:bg-amber-950/30 border-amber-500/30",
+        titleClass: "text-amber-900 dark:text-amber-300",
+        badgeClass: "text-amber-800 dark:text-amber-200",
         IconComponent: Star,
         iconClass: "fill-amber-400 text-amber-400",
         noStatText: "No ratings logged",
       },
       {
-        id: "dartcaptain",
-        title: "Dart Captain 🎯",
-        winner: [...memberStats].filter((m) => m.totalDarts > 0).sort((a, b) => b.totalDarts - a.totalDarts)[0],
-        getStatText: (w: typeof memberStats[0]) => `${w.totalDarts} dart & break logs`,
-        getScore: (w: typeof memberStats[0]) => (w ? 60 + w.totalDarts * 3 : 0),
-        cardClass: "bg-emerald-50/70 dark:bg-emerald-950/20 border-emerald-200/80 dark:border-emerald-900/40",
-        titleClass: "text-emerald-800 dark:text-emerald-300",
-        badgeClass: "text-emerald-900/80 dark:text-emerald-300/80",
-        IconComponent: Coffee,
-        iconClass: "text-emerald-600 dark:text-emerald-400",
-        noStatText: "No dart logs",
+        id: "loyalist",
+        title: "Monogamous Drinker 🔒",
+        tagline: "Has never turned to page 2 of the beer menu",
+        winner: [...memberStats].filter((m) => m.topBeerCount > 1).sort((a, b) => b.topBeerCount - a.topBeerCount)[0],
+        getStatText: (w: typeof memberStats[0]) => `${w.topBeerCount} check-ins for '${w.topBeerName}'. Pure loyalty.`,
+        getScore: (w: typeof memberStats[0]) => (w ? 70 + w.topBeerCount * 3 : 0),
+        cardClass: "bg-pink-500/10 dark:bg-pink-950/30 border-pink-500/30",
+        titleClass: "text-pink-900 dark:text-pink-300",
+        badgeClass: "text-pink-800 dark:text-pink-200",
+        IconComponent: Crown,
+        iconClass: "text-pink-600 dark:text-pink-400",
+        noStatText: "No repeated beers logged",
       },
       {
-        id: "drydays",
-        title: "Dry Spell Champ 💧",
-        winner: [...memberStats].filter((m) => m.soberDays > 0).sort((a, b) => b.soberDays - a.soberDays)[0],
-        getStatText: (w: typeof memberStats[0]) => `${w.soberDays} dry days logged`,
-        getScore: (w: typeof memberStats[0]) => (w ? 30 + w.soberDays : 0),
-        cardClass: "bg-teal-50/70 dark:bg-teal-950/20 border-teal-200/80 dark:border-teal-900/40",
-        titleClass: "text-teal-800 dark:text-teal-300",
-        badgeClass: "text-teal-900/80 dark:text-teal-300/80",
-        IconComponent: Coffee,
+        id: "daytime",
+        title: "Daylight Pioneer 🌅",
+        tagline: "It's 12:01 PM somewhere in the tavern",
+        winner: [...memberStats].filter((m) => m.earlyCount > 0).sort((a, b) => b.earlyCount - a.earlyCount)[0],
+        getStatText: (w: typeof memberStats[0]) => `${w.earlyCount} afternoon daylight pints poured.`,
+        getScore: (w: typeof memberStats[0]) => (w ? 68 + w.earlyCount * 3 : 0),
+        cardClass: "bg-yellow-500/10 dark:bg-yellow-950/30 border-yellow-500/30",
+        titleClass: "text-yellow-900 dark:text-yellow-300",
+        badgeClass: "text-yellow-800 dark:text-yellow-200",
+        IconComponent: Sparkles,
+        iconClass: "text-yellow-600 dark:text-yellow-400",
+        noStatText: "No early afternoon logs",
+      },
+      {
+        id: "generous",
+        title: "Easiest To Please 🌟",
+        tagline: "Gave 5 stars to lukewarm lager out of pure love",
+        winner: [...memberStats].filter((m) => m.avgRating > 0).sort((a, b) => b.avgRating - a.avgRating)[0],
+        getStatText: (w: typeof memberStats[0]) => `Glowing ${w.avgRating} / 5.0 rating average! Loves every drop.`,
+        getScore: (w: typeof memberStats[0]) => (w ? 65 + w.avgRating * 4 : 0),
+        cardClass: "bg-orange-500/10 dark:bg-orange-950/30 border-orange-500/30",
+        titleClass: "text-orange-900 dark:text-orange-300",
+        badgeClass: "text-orange-800 dark:text-orange-200",
+        IconComponent: Star,
+        iconClass: "fill-orange-400 text-orange-400",
+        noStatText: "No ratings logged",
+      },
+      {
+        id: "marathon",
+        title: "Iron Liver Legend 🛡️",
+        tagline: "Showing up to the pub with clockwork regularity",
+        winner: [...memberStats].filter((m) => m.activeDaysCount > 0).sort((a, b) => b.activeDaysCount - a.activeDaysCount)[0],
+        getStatText: (w: typeof memberStats[0]) => `Checked in on ${w.activeDaysCount} distinct days this period!`,
+        getScore: (w: typeof memberStats[0]) => (w ? 60 + w.activeDaysCount * 4 : 0),
+        cardClass: "bg-teal-500/10 dark:bg-teal-950/30 border-teal-500/30",
+        titleClass: "text-teal-900 dark:text-teal-300",
+        badgeClass: "text-teal-800 dark:text-teal-200",
+        IconComponent: Shield,
         iconClass: "text-teal-600 dark:text-teal-400",
-        noStatText: "No dry days",
+        noStatText: "No active days logged",
       },
     ];
 
+    // Weekly Rotation Logic:
+    // Offset candidate order by currentWeekNum * 3
+    const offset = (currentWeekNum * 3) % candidates.length;
+    const rotatedPool = [];
+    for (let i = 0; i < candidates.length; i++) {
+      rotatedPool.push(candidates[(offset + i) % candidates.length]);
+    }
+
     // Evaluate candidates with scored winners
-    const evaluated = candidates.map((cand) => ({
+    const evaluated = rotatedPool.map((cand) => ({
       ...cand,
       score: cand.winner ? cand.getScore(cand.winner) : 0,
     }));
 
-    // Sort candidates with actual activity first
+    // Pick top 4 active from rotated pool, or pad with default items from rotated pool
     const activeCandidates = evaluated.filter((c) => c.winner && c.score > 0);
-    activeCandidates.sort((a, b) => b.score - a.score);
-
-    // Pick top 4 active, or pad with defaults if fewer than 4 have activity
     const top4 = [...activeCandidates.slice(0, 4)];
     if (top4.length < 4) {
       const usedIds = new Set(top4.map((c) => c.id));
@@ -872,9 +972,10 @@ export default function PubHub({
 
     return {
       top4,
-      totalPeriodLogs: superlativeFilteredLogs.length
+      totalPeriodLogs: superlativeFilteredLogs.length,
+      currentWeekNum
     };
-  }, [activeMembers, superlativeFilteredLogs, superlativeTimeframe]);
+  }, [activeMembers, superlativeFilteredLogs, superlativeTimeframe, currentWeekNum]);
 
   // Graph 1: "A Pint in Time" Cumulative Timeline
   const pubGraphData = useMemo(() => {
@@ -973,32 +1074,57 @@ export default function PubHub({
   // RENDER UNIFIED PUB PAGE VIEW
   // ===========================================================================
   return (
-    <div className="space-y-6 animate-in fade-in duration-200">
+    <div className="space-y-4 animate-in fade-in duration-200">
       {/* Top Pub Navigation & Toggle Header Bar */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 sm:p-4 shadow-2xs space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          {/* Left: Dropdown Pub Selector + Pin Button + Establish Pub Button */}
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <div className="relative flex-1 max-w-xs sm:max-w-sm">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 sm:p-4 shadow-2xs space-y-3">
+        {/* Top selector and quick tools */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {/* Left: Dropdown Pub Selector + Pin */}
+          <div className="flex items-center gap-2 flex-1 min-w-[180px]">
+            <div className="relative flex-1">
               <select
                 value={activePubId}
                 onChange={(e) => handleSelectPub(e.target.value)}
-                disabled={myPubs.length === 0}
+                disabled={pubs.length === 0}
                 className="w-full pl-3 pr-8 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-extrabold text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all cursor-pointer appearance-none shadow-2xs"
               >
-                {myPubs.length === 0 ? (
-                  <option value="">No Pubs Joined Yet</option>
+                {pubs.length === 0 ? (
+                  <option value="">No Pubs Available</option>
                 ) : (
-                  myPubs.map((p) => {
-                    const isImg = p.emblem && (p.emblem.startsWith("http") || p.emblem.startsWith("/") || p.emblem.startsWith("data:"));
-                    const displayEmblem = p.emblem ? (isImg ? "🖼️" : p.emblem) : "🏠";
-                    const isPinned = pinnedPubId === p.id;
-                    return (
-                      <option key={p.id} value={p.id}>
-                        {displayEmblem} {p.name} {isPinned ? "📌 (Pinned)" : ""}
-                      </option>
-                    );
-                  })
+                  <>
+                    {myPubs.length > 0 && (
+                      <optgroup label="Joined Pubs">
+                        {myPubs.map((p) => {
+                          const isImg = p.emblem && (p.emblem.startsWith("http") || p.emblem.startsWith("/") || p.emblem.startsWith("data:"));
+                          const displayEmblem = p.emblem ? (isImg ? "🖼️" : p.emblem) : "🏠";
+                          const isPinned = pinnedPubId === p.id;
+                          return (
+                            <option key={p.id} value={p.id}>
+                              {displayEmblem} {p.name} {isPinned ? "📌 (Pinned)" : ""}
+                            </option>
+                          );
+                        })}
+                      </optgroup>
+                    )}
+                    {myInvites.length > 0 && (
+                      <optgroup label="Pub Invitations">
+                        {myInvites.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            ✉️ {p.name} (Invited)
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {otherPubs.length > 0 && (
+                      <optgroup label="Explore Other Pubs">
+                        {otherPubs.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            🧭 {p.name} ({p.members.length} members)
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </>
                 )}
               </select>
 
@@ -1007,54 +1133,45 @@ export default function PubHub({
               </div>
             </div>
 
-            {/* Pin Button */}
             {onPinPub && (
               <button
                 type="button"
                 id="pin-pub-hub-button"
                 onClick={() => onPinPub(activePubId)}
                 title={pinnedPubId === activePubId ? "Unpin this view" : "Pin as default view across app"}
-                className={`p-2 rounded-xl border transition-all shrink-0 cursor-pointer ${
+                className={`p-2 rounded-xl border transition-all shrink-0 cursor-pointer min-h-[36px] ${
                   pinnedPubId === activePubId
                     ? "bg-amber-500 text-slate-950 border-amber-500 font-extrabold shadow-xs"
-                    : "bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100"
+                    : "bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                 }`}
               >
                 <Pin className={`w-4 h-4 ${pinnedPubId === activePubId ? "fill-slate-950" : ""}`} />
               </button>
             )}
-
-            {/* Create New Pub Button */}
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="px-3 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs rounded-xl shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
-            >
-              <Plus className="w-3.5 h-3.5 stroke-[3px]" />
-              <span className="hidden sm:inline">New Pub</span>
-            </button>
           </div>
 
-          {/* Right: Pub Controls */}
-          <div className="flex flex-wrap items-center gap-2">
+          {/* Right Action Tools */}
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               onClick={() => setShowRoster(prev => ({ ...prev, [activePubId]: !prev[activePubId] }))}
-              className="px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1"
+              className="px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1 min-h-[36px]"
             >
               <Users className="w-3.5 h-3.5 text-amber-500" />
-              Roster ({activeMembers.length})
+              <span className="hidden xs:inline">Roster</span> ({activeMembers.length})
             </button>
 
             {activePub && isOwner && (
               <>
                 <button
                   onClick={() => setInvitingPubId(invitingPubId === activePub.id ? null : activePub.id)}
-                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs rounded-xl transition-all cursor-pointer flex items-center gap-1"
+                  className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs rounded-xl transition-all cursor-pointer flex items-center gap-1 min-h-[36px]"
                 >
-                  <UserPlus className="w-3.5 h-3.5" /> Invite
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span className="hidden xs:inline">Invite</span>
                 </button>
                 <button
                   onClick={() => startEditing(activePub)}
-                  className="p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-300 rounded-xl transition-all cursor-pointer"
+                  className="p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-300 rounded-xl transition-all cursor-pointer min-h-[36px] w-[36px] flex items-center justify-center"
                   title="Edit Pub"
                 >
                   <Edit2 className="w-3.5 h-3.5" />
@@ -1062,75 +1179,69 @@ export default function PubHub({
               </>
             )}
 
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-2xs transition-all cursor-pointer flex items-center gap-1 min-h-[36px]"
+            >
+              <Plus className="w-3.5 h-3.5 stroke-[3px]" />
+              <span className="hidden sm:inline">New Pub</span>
+            </button>
+
             {activePub && !isOwner && activePub.members.includes(currentUser) && (
               <button
                 onClick={() => handleLeavePub(activePub.id)}
-                className="px-2.5 py-1.5 text-red-500 hover:bg-red-500/10 rounded-xl text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
+                className="p-1.5 text-red-500 hover:bg-red-500/10 rounded-xl text-xs font-bold transition-all cursor-pointer min-h-[36px]"
+                title="Leave Pub"
               >
-                <LogOut className="w-3.5 h-3.5" /> Leave
+                <LogOut className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
         </div>
 
-        {/* Header Info Sub-bar */}
-        <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="p-1.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl shrink-0">
-              {activePub ? renderEmblem(activePub.emblem, "w-7 h-7 text-xl") : <span className="shrink-0 text-xl">🍻</span>}
+        {/* Header Summary Sub-bar */}
+        <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="p-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg shrink-0">
+              {activePub ? renderEmblem(activePub.emblem, "w-6 h-6 text-base") : <span className="shrink-0 text-base">🍻</span>}
             </div>
-            <div>
-              <h1 className="text-base font-black text-slate-900 dark:text-white leading-snug flex items-center gap-2">
+            <div className="min-w-0">
+              <h1 className="text-sm sm:text-base font-black text-slate-900 dark:text-white leading-tight truncate">
                 {activePub ? activePub.name : "No Pub Selected"}
-                {activePub && pinnedPubId === activePub.id && (
-                  <span className="text-[10px] bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-md font-bold flex items-center gap-1">
-                    <Pin className="w-2.5 h-2.5 fill-amber-500" /> Pinned View
-                  </span>
-                )}
               </h1>
-              <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                {activePub ? (
-                  <>
-                    <span>Host: @{activePub.owner}</span>
-                    <span>•</span>
-                    <span>{activePub.members.length} Members</span>
-                    <span>•</span>
-                    <span className="font-bold text-amber-600 dark:text-amber-400">{activePubFilteredLogs.length} Pints</span>
-                  </>
-                ) : (
-                  <span>Establish or join a pub to get started</span>
-                )}
-              </div>
+              <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">
+                Host: @{activePub?.owner || "System"} • <span className="font-bold text-amber-500">{activePubFilteredLogs.length} Pints</span>
+              </p>
             </div>
           </div>
 
           {activePub && !activePub.members.includes(currentUser) && (
             <button
               onClick={() => handleJoinPub(activePub.id)}
-              className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-xs flex items-center gap-1.5"
+              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-xs flex items-center gap-1 shrink-0"
             >
-              <UserPlus className="w-3.5 h-3.5" /> Join {activePub.name}
+              <UserPlus className="w-3.5 h-3.5" /> Join
             </button>
           )}
         </div>
 
-        {/* Roster & Invites Expandable Panel */}
+        {/* Expandable Roster & Invites Drawer */}
         <AnimatePresence>
           {showRoster[activePubId] && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
-              className="overflow-hidden pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3"
+              className="overflow-hidden pt-2.5 border-t border-slate-100 dark:border-slate-800 space-y-2.5"
             >
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1.5">
                 {activeMembers.map(member => (
                   <div
                     key={member}
                     onClick={() => onViewProfileRequested?.(member)}
-                    className="inline-flex items-center gap-1.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-2.5 py-1 rounded-full text-xs font-bold text-slate-800 dark:text-slate-200 cursor-pointer hover:border-amber-400 transition-all"
+                    className="inline-flex items-center gap-1.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-2.5 py-1 rounded-full text-[11px] font-bold text-slate-800 dark:text-slate-200 cursor-pointer hover:border-amber-400 transition-all"
                   >
-                    <UserAvatar username={member} users={users} className="w-4 h-4 text-[10px]" />
+                    <UserAvatar username={member} users={users} className="w-4 h-4 text-[9px]" />
                     <span>@{member}</span>
                     {activePub && member === activePub.owner && <Shield className="w-3 h-3 text-amber-500 fill-amber-500" title="Host" />}
                   </div>
@@ -1172,457 +1283,489 @@ export default function PubHub({
                     {additionalInvitees.length > 0 && (
                       <button
                         onClick={() => handleSendInvitations(activePub.id)}
-                          className="px-4 py-1.5 bg-amber-500 text-slate-950 text-xs font-black rounded-lg flex items-center gap-1"
-                        >
-                          <Send className="w-3 h-3" /> Send ({additionalInvitees.length})
-                        </button>
-                      )}
-                    </div>
+                        className="px-4 py-1.5 bg-amber-500 text-slate-950 text-xs font-black rounded-lg flex items-center gap-1"
+                      >
+                        <Send className="w-3 h-3" /> Send ({additionalInvitees.length})
+                      </button>
+                    )}
                   </div>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Squad Beacon Station Bar - Mobile & Desktop Responsive */}
+      <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-amber-950/40 border-2 border-orange-500/40 rounded-2xl p-3 sm:p-4 shadow-lg relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="p-2 bg-orange-500/15 border border-orange-500/40 rounded-xl text-orange-400 shrink-0">
+            <Flame className="w-5 h-5 text-orange-500 fill-orange-500/30 animate-pulse" />
+          </div>
+          <div className="min-w-0">
+            <h3 className="text-xs sm:text-sm font-black text-slate-100 flex items-center gap-1.5 leading-snug">
+              Light the Beacons! 🔥
+            </h3>
+            <p className="text-[10px] sm:text-[11px] text-slate-300 leading-tight">
+              Signal mates that pints call for aid!
+            </p>
+          </div>
         </div>
 
-        {/* Messages */}
-        {error && (
-          <div className="p-3.5 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span className="font-semibold">{error}</span>
-          </div>
-        )}
-        {success && (
-          <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-xs flex items-center gap-2">
-            <Sparkles className="w-4 h-4 shrink-0 text-amber-500" />
-            <span className="font-semibold">{success}</span>
-          </div>
-        )}
+        <button
+          type="button"
+          onClick={() => {
+            setShowBeaconModal(true);
+            setBeaconError("");
+          }}
+          disabled={rallySending}
+          className="w-full sm:w-auto px-4 py-2.5 sm:py-2 bg-gradient-to-r from-amber-500 via-orange-500 to-red-600 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-md hover:brightness-110 active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
+        >
+          <Flame className="w-4 h-4 fill-slate-950/40 shrink-0" />
+          <span>{rallySending ? "Lighting..." : "Light Beacon! 🔥"}</span>
+        </button>
+      </div>
 
-        {/* Community Highlights & Dynamic Superlatives */}
-        {pubSuperlatives && (
-          <div className="bg-white dark:bg-slate-900/90 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-5 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3.5 gap-3">
-              <div>
-                <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 tracking-tight flex items-center gap-1.5">
-                  <Award className="w-4 h-4 text-amber-500" />
-                  Pub Honor Roll & Superlatives
-                </h3>
-                <p className="text-[11px] text-slate-400 mt-0.5 font-normal">
-                  Dynamic weekly & monthly honors calculated for pub members
-                </p>
-              </div>
-
-              {/* Timeframe Selector Pills */}
-              <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200/60 dark:border-slate-700/60 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setSuperlativeTimeframe("7d")}
-                  className={`px-3 py-1 text-[10px] font-extrabold rounded-lg transition-all cursor-pointer ${
-                    superlativeTimeframe === "7d"
-                      ? "bg-amber-500 text-slate-950 shadow-xs"
-                      : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
-                  }`}
-                >
-                  This Week
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSuperlativeTimeframe("30d")}
-                  className={`px-3 py-1 text-[10px] font-extrabold rounded-lg transition-all cursor-pointer ${
-                    superlativeTimeframe === "30d"
-                      ? "bg-amber-500 text-slate-950 shadow-xs"
-                      : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
-                  }`}
-                >
-                  This Month
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSuperlativeTimeframe("year")}
-                  className={`px-3 py-1 text-[10px] font-extrabold rounded-lg transition-all cursor-pointer ${
-                    superlativeTimeframe === "year"
-                      ? "bg-amber-500 text-slate-950 shadow-xs"
-                      : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
-                  }`}
-                >
-                  This Year
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSuperlativeTimeframe("all")}
-                  className={`px-3 py-1 text-[10px] font-extrabold rounded-lg transition-all cursor-pointer ${
-                    superlativeTimeframe === "all"
-                      ? "bg-amber-500 text-slate-950 shadow-xs"
-                      : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
-                  }`}
-                >
-                  All Time
-                </button>
-              </div>
-            </div>
-
-            {pubSuperlatives.totalPeriodLogs === 0 ? (
-              <div className="py-8 px-4 text-center bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-700/60 space-y-1">
-                <p className="text-xs font-bold text-slate-600 dark:text-slate-300">
-                  No pub check-ins logged in{" "}
-                  {superlativeTimeframe === "7d"
-                    ? "the past 7 days"
-                    : superlativeTimeframe === "30d"
-                    ? "the past 30 days"
-                    : superlativeTimeframe === "year"
-                    ? "this past year"
-                    : "all time"}
-                </p>
-                <p className="text-[11px] text-slate-400">
-                  Switch timeframes above or log a pint to kick off the pub superlatives! 🍻
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {pubSuperlatives.top4.map((item) => {
-                  const IconComp = item.IconComponent;
-                  return (
-                    <div
-                      key={item.id}
-                      className={`border rounded-xl p-3.5 space-y-1.5 transition-all hover:scale-[1.02] shadow-2xs ${item.cardClass}`}
-                    >
-                      <div className={`flex items-center gap-1.5 ${item.titleClass}`}>
-                        <IconComp className={`w-3.5 h-3.5 ${item.iconClass}`} />
-                        <span className="text-[10px] font-black uppercase tracking-wider">{item.title}</span>
-                      </div>
-                      {item.winner ? (
-                        <div>
-                          <p className="font-extrabold text-xs truncate">
-                            @{item.winner.username}
-                          </p>
-                          <p className={`text-[10px] font-bold ${item.badgeClass}`}>
-                            {item.getStatText(item.winner)}
-                          </p>
-                        </div>
-                      ) : (
-                        <p className="text-[10px] opacity-60 italic">{item.noStatText}</p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Squad Beacon Station (Light the Beacons theme) */}
-        <div className="space-y-2">
-          <button
-            type="button"
-            onClick={() => setShowRallyStation(prev => !prev)}
-            className="w-full bg-slate-900 border border-slate-800 hover:border-orange-500/50 rounded-xl p-3 shadow-sm text-left flex items-center justify-between transition-all cursor-pointer group"
-          >
-            <div className="flex items-center gap-2.5">
-              <div className="p-1.5 bg-orange-500/10 border border-orange-500/30 rounded-lg text-orange-400">
-                <Flame className="w-4 h-4 text-orange-500 fill-orange-500/30 animate-pulse" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-black text-slate-100 uppercase tracking-wider">
-                    🔥 Light the Beacons!
-                  </span>
-                  <span className="text-[10px] font-bold text-orange-400 bg-orange-500/10 border border-orange-500/20 px-2 py-0.5 rounded uppercase">
-                    Pub Beacon
-                  </span>
+      {/* Beacon Bar Name Modal */}
+      {showBeaconModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-slate-900 border-2 border-orange-500/60 rounded-2xl p-5 max-w-md w-full shadow-2xl space-y-4 relative animate-in fade-in zoom-in-95">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-orange-500/20 border border-orange-500/50 rounded-xl text-orange-400">
+                  <Flame className="w-6 h-6 text-orange-500 fill-orange-500/30 animate-pulse" />
                 </div>
-                <p className="text-[11px] text-slate-400 font-medium">Signal your mates that a pint session is underway</p>
+                <div>
+                  <h3 className="text-base font-black text-white flex items-center gap-1.5">
+                    Light the Beacons! 🔥
+                  </h3>
+                  <p className="text-xs text-slate-300">
+                    Broadcast a rally call to all members of <span className="font-extrabold text-amber-400">{activePub?.name || "your Pub"}</span>!
+                  </p>
+                </div>
               </div>
-            </div>
-            <span className="text-xs font-bold text-orange-400 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700 group-hover:bg-slate-750 transition-all flex items-center gap-1.5 shrink-0">
-              {showRallyStation ? "Hide Beacon Control ▲" : "Light the Beacons! ▼"}
-            </span>
-          </button>
-
-          <AnimatePresence>
-            {showRallyStation && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden"
+              <button
+                type="button"
+                onClick={() => { setShowBeaconModal(false); setBeaconError(""); }}
+                className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
               >
-                <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-amber-950/40 border-2 border-orange-500/40 rounded-2xl p-4 sm:p-5 shadow-2xl relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-4 mt-1">
-                  {/* Fiery animated top bar */}
-                  <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-500 via-orange-500 to-red-600 animate-pulse" />
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-                  <div className="flex items-center gap-4 z-10">
-                    <div className="p-3.5 bg-orange-500/15 border border-orange-500/40 rounded-2xl text-orange-400 shrink-0 shadow-inner">
-                      <Flame className="w-8 h-8 text-orange-500 fill-orange-500/30 animate-bounce" />
-                    </div>
-                    <div className="space-y-1 text-center md:text-left">
-                      <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-orange-400 bg-orange-500/15 border border-orange-500/30 px-2 py-0.5 rounded">
-                          BEACON STATION
-                        </span>
-                        <span className="text-[11px] text-slate-400 font-bold">• @{activePub?.name || "Pub"} Signal</span>
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
+                Bar / Pub Name <span className="text-orange-400">*</span>
+              </label>
+              <input
+                type="text"
+                value={beaconBarName}
+                onChange={(e) => {
+                  setBeaconBarName(e.target.value);
+                  if (beaconError) setBeaconError("");
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (!beaconBarName.trim()) {
+                      setBeaconError("Please enter the bar or pub name before lighting the beacons!");
+                      return;
+                    }
+                    handleTriggerRally(activePub?.id || "", beaconBarName);
+                  }
+                }}
+                placeholder="e.g. The Crown & Anchor, O'Malley's, The Red Lion..."
+                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm font-semibold text-white placeholder-slate-500 focus:outline-hidden focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+                autoFocus
+              />
+              {beaconError && (
+                <p className="text-xs text-red-400 font-bold">{beaconError}</p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => { setShowBeaconModal(false); setBeaconError(""); }}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!beaconBarName.trim()) {
+                    setBeaconError("Please enter the bar or pub name before lighting the beacons!");
+                    return;
+                  }
+                  handleTriggerRally(activePub?.id || "", beaconBarName);
+                }}
+                disabled={rallySending}
+                className="px-4 py-2 bg-gradient-to-r from-amber-500 via-orange-500 to-red-600 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-md hover:brightness-110 active:scale-95 transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <Flame className="w-4 h-4 fill-slate-950/40" />
+                <span>{rallySending ? "Lighting..." : "Light Beacons! 🔥"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {rallySentNotice && (
+        <div className="p-3 bg-gradient-to-r from-amber-500 via-orange-500 to-red-600 text-slate-950 rounded-xl font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg animate-bounce border border-amber-300">
+          <Flame className="w-4 h-4 fill-slate-950/40" />
+          <span>🔥 THE BEACONS ARE LIT AT {rallySentNotice.toUpperCase()}! Broadcast sent to chat: "Pints call for aid!" ⚔️🍺</span>
+        </div>
+      )}
+
+      {/* MOBILE-CENTERED SEGMENTED TAB SWITCHER */}
+      <div className="flex items-center gap-1.5 p-1.5 bg-slate-100 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-x-auto custom-scrollbar shadow-2xs">
+        <button
+          type="button"
+          onClick={() => setActiveTab("chat")}
+          className={`flex-1 min-w-[90px] py-2 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap min-h-[38px] ${
+            activeTab === "chat"
+              ? "bg-amber-500 text-slate-950 shadow-xs"
+              : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+          }`}
+        >
+          <MessageSquare className="w-3.5 h-3.5" />
+          <span>Banter</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("superlatives")}
+          className={`flex-1 min-w-[95px] py-2 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap min-h-[38px] ${
+            activeTab === "superlatives"
+              ? "bg-amber-500 text-slate-950 shadow-xs"
+              : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+          }`}
+        >
+          <Award className="w-3.5 h-3.5" />
+          <span>Honor Roll</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("gauge")}
+          className={`flex-1 min-w-[90px] py-2 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap min-h-[38px] ${
+            activeTab === "gauge"
+              ? "bg-amber-500 text-slate-950 shadow-xs"
+              : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+          }`}
+        >
+          <Beer className="w-3.5 h-3.5" />
+          <span>Gauge</span>
+        </button>
+      </div>
+
+      {/* Messages */}
+      {error && (
+        <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span className="font-semibold">{error}</span>
+        </div>
+      )}
+      {success && (
+        <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-xs flex items-center gap-2">
+          <Sparkles className="w-4 h-4 shrink-0 text-amber-500" />
+          <span className="font-semibold">{success}</span>
+        </div>
+      )}
+
+      {/* 1. BANTER TAB */}
+      {activeTab === "chat" && (
+        <div className="space-y-3">
+          {/* Live Chat Box */}
+          <PubChatSection
+            pubId={activePub?.id || ""}
+            pubName={activePub?.name || "Pub"}
+            pubOwner={activePub?.owner || "System"}
+            currentUser={currentUser}
+            users={users}
+            onViewProfileRequested={onViewProfileRequested}
+            messageRefreshKey={chatRefreshKey}
+          />
+        </div>
+      )}
+
+      {/* 2. HONOR ROLL / SUPERLATIVES TAB */}
+      {activeTab === "superlatives" && pubSuperlatives && (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs p-4 sm:p-5 space-y-3.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 gap-2.5">
+            <div>
+              <h3 className="text-xs sm:text-sm font-extrabold text-slate-800 dark:text-slate-100 tracking-tight flex items-center gap-1.5">
+                <Award className="w-4 h-4 text-amber-500" />
+                Pub Honor Roll & Superlatives
+              </h3>
+              <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5">
+                Comedic & rotating weekly honors calculated for pub members
+              </p>
+            </div>
+
+            {/* Timeframe Selector Pills */}
+            <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200/60 dark:border-slate-700/60 shrink-0 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setSuperlativeTimeframe("7d")}
+                className={`px-2.5 py-1 text-[10px] font-extrabold rounded-lg transition-all cursor-pointer ${
+                  superlativeTimeframe === "7d"
+                    ? "bg-amber-500 text-slate-950 shadow-xs"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                }`}
+              >
+                Week
+              </button>
+              <button
+                type="button"
+                onClick={() => setSuperlativeTimeframe("30d")}
+                className={`px-2.5 py-1 text-[10px] font-extrabold rounded-lg transition-all cursor-pointer ${
+                  superlativeTimeframe === "30d"
+                    ? "bg-amber-500 text-slate-950 shadow-xs"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                }`}
+              >
+                Month
+              </button>
+              <button
+                type="button"
+                onClick={() => setSuperlativeTimeframe("year")}
+                className={`px-2.5 py-1 text-[10px] font-extrabold rounded-lg transition-all cursor-pointer ${
+                  superlativeTimeframe === "year"
+                    ? "bg-amber-500 text-slate-950 shadow-xs"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                }`}
+              >
+                Year
+              </button>
+              <button
+                type="button"
+                onClick={() => setSuperlativeTimeframe("all")}
+                className={`px-2.5 py-1 text-[10px] font-extrabold rounded-lg transition-all cursor-pointer ${
+                  superlativeTimeframe === "all"
+                    ? "bg-amber-500 text-slate-950 shadow-xs"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                }`}
+              >
+                All
+              </button>
+            </div>
+          </div>
+
+          {pubSuperlatives.totalPeriodLogs === 0 ? (
+            <div className="py-8 px-4 text-center bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-700/60 space-y-1">
+              <p className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                No pub check-ins logged in{" "}
+                {superlativeTimeframe === "7d"
+                  ? "the past 7 days"
+                  : superlativeTimeframe === "30d"
+                  ? "the past 30 days"
+                  : superlativeTimeframe === "year"
+                  ? "this past year"
+                  : "all time"}
+              </p>
+              <p className="text-[11px] text-slate-400">
+                Switch timeframes above or log a pint to kick off superlatives! 🍻
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {pubSuperlatives.top4.map((item) => {
+                const IconComp = item.IconComponent;
+                return (
+                  <div
+                    key={item.id}
+                    className={`border rounded-xl p-3.5 space-y-1.5 transition-all shadow-2xs ${item.cardClass}`}
+                  >
+                    <div className="flex items-center justify-between gap-1">
+                      <div className={`flex items-center gap-1.5 ${item.titleClass}`}>
+                        <IconComp className={`w-4 h-4 shrink-0 ${item.iconClass}`} />
+                        <span className="text-xs font-black uppercase tracking-wider truncate">{item.title}</span>
                       </div>
-                      <h2 className="text-base sm:text-lg font-black text-slate-100 tracking-tight flex items-center justify-center md:justify-start gap-2">
-                        The Beacons of Amon Dîn Are Lit! 🔥
-                      </h2>
-                      <p className="text-xs text-slate-300 max-w-lg">
-                        Hit the beacon button to send an urgent signal to all mates in @{activePub?.name || "Pub"} chat: <span className="text-amber-300 font-bold">"THE BEACONS ARE LIT! Pints call for aid!"</span>
-                      </p>
                     </div>
-                  </div>
-
-                  {/* Big Beacon Button */}
-                  <div className="flex flex-col items-center z-10 shrink-0 pt-1 md:pt-0">
-                    <button
-                      type="button"
-                      onClick={() => handleTriggerRally(activePub?.id || "")}
-                      disabled={rallySending}
-                      className="group relative inline-flex items-center justify-center p-2 rounded-full bg-gradient-to-b from-slate-800 via-slate-900 to-slate-950 border-2 border-orange-500/50 shadow-2xl cursor-pointer hover:border-amber-400 active:scale-95 transition-all"
-                      title="LIGHT THE BEACON!"
-                    >
-                      {/* Outer pulsing fiery ring */}
-                      <span className="absolute -inset-1 rounded-full bg-orange-500/30 animate-ping pointer-events-none" />
-
-                      {/* 3D Round Fiery Beacon Button */}
-                      <div className="w-22 h-22 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-amber-400 via-orange-600 to-red-700 border-2 border-amber-300/80 shadow-[inset_0_3px_6px_rgba(255,255,255,0.5),0_8px_20px_rgba(234,88,12,0.5)] flex flex-col items-center justify-center gap-0.5 text-white font-black tracking-wider uppercase group-hover:from-amber-300 group-hover:to-red-600 active:shadow-inner transition-all">
-                        <Flame className="w-8 h-8 sm:w-9 sm:h-9 text-amber-100 fill-amber-200/50 drop-shadow-md animate-pulse" />
-                        <span className="text-[10px] sm:text-[11px] text-white font-black tracking-wider drop-shadow-md text-center leading-tight">
-                          {rallySending ? "LIGHTING..." : "LIGHT THE BEACONS!"}
-                        </span>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 italic leading-tight">
+                      "{item.tagline}"
+                    </p>
+                    {item.winner ? (
+                      <div className="pt-1 border-t border-slate-200/40 dark:border-slate-700/40">
+                        <p className="font-extrabold text-xs sm:text-sm text-slate-900 dark:text-slate-100 truncate">
+                          @{item.winner.username}
+                        </p>
+                        <p className={`text-[11px] font-bold ${item.badgeClass} leading-snug mt-0.5`}>
+                          {item.getStatText(item.winner)}
+                        </p>
                       </div>
-                    </button>
-                    <span className="text-[10px] font-black text-orange-400 mt-2 uppercase tracking-widest flex items-center gap-1">
-                      🔥 PRESS TO LIGHT BEACON
-                    </span>
+                    ) : (
+                      <p className="text-[10px] opacity-60 italic pt-1">{item.noStatText}</p>
+                    )}
                   </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {rallySentNotice && (
-            <div className="p-3.5 bg-gradient-to-r from-amber-500 via-orange-500 to-red-600 text-slate-950 rounded-xl font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg animate-bounce border border-amber-300">
-              <Flame className="w-4 h-4 fill-slate-950/40" />
-              <span>🔥 THE BEACONS ARE LIT! Broadcast sent to chat: "Pints call for aid!" ⚔️🍺</span>
+                );
+              })}
             </div>
           )}
         </div>
+      )}
 
-        {/* Pub Community Chat Section */}
-        <PubChatSection
-          pubId={activePub?.id || ""}
-          pubName={activePub?.name || "Pub"}
-          pubOwner={activePub?.owner || "System"}
-          currentUser={currentUser}
-          users={users}
-          onViewProfileRequested={onViewProfileRequested}
-          messageRefreshKey={chatRefreshKey}
-        />
-
-        {/* Is it a Guinness? Speedometer Gauge Chart */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
-          <div className="border-b border-slate-100 pb-3 flex justify-between items-center">
+      {/* 3. GUINNESS GAUGE TAB */}
+      {activeTab === "gauge" && (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs p-4 sm:p-5 space-y-4">
+          <div className="border-b border-slate-100 dark:border-slate-800 pb-3 flex justify-between items-center">
             <div>
-              <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+              <h3 className="text-xs sm:text-sm font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
                 <Beer className="w-4 h-4 text-amber-500" />
                 Is it a Guinness?
               </h3>
-              <p className="text-[11px] text-slate-400 mt-0.5">Creamy stout vs other craft beers logged in {activePub?.name || "this Pub"}</p>
+              <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5">Creamy stout vs other craft beers logged in {activePub?.name || "this Pub"}</p>
             </div>
           </div>
 
-            <div className="flex flex-col items-center justify-center py-2">
-              {activePubFilteredLogs.length === 0 ? (
-                <div className="w-full h-56 flex items-center justify-center text-slate-400 italic">No logs within filtered period</div>
-              ) : (() => {
-                const totalBeers = activePubFilteredLogs.length;
-                const guinnessCount = activePubFilteredLogs.filter(log => log.beerName && log.beerName.toLowerCase().includes("guinness")).length;
-                const otherCount = totalBeers - guinnessCount;
-                const guinnessPercent = totalBeers > 0 ? Math.round((guinnessCount / totalBeers) * 100) : 0;
-                const otherPercent = totalBeers > 0 ? 100 - guinnessPercent : 0;
-                
-                // Gauge logic:
-                // angle goes from 180 degrees (0% - Left) to 0 degrees (100% - Right)
-                const angleDegrees = 180 - (guinnessPercent / 100) * 180;
-                const angleRad = (angleDegrees * Math.PI) / 180;
-                const cx = 100;
-                const cy = 100;
-                const needleLen = 58;
-                const nx = cx + needleLen * Math.cos(angleRad);
-                const ny = cy - needleLen * Math.sin(angleRad);
+          <div className="flex flex-col items-center justify-center py-2">
+            {activePubFilteredLogs.length === 0 ? (
+              <div className="w-full h-40 flex items-center justify-center text-slate-400 italic text-xs">No logs within filtered period</div>
+            ) : (() => {
+              const totalBeers = activePubFilteredLogs.length;
+              const guinnessCount = activePubFilteredLogs.filter(log => log.beerName && log.beerName.toLowerCase().includes("guinness")).length;
+              const otherCount = totalBeers - guinnessCount;
+              const guinnessPercent = totalBeers > 0 ? Math.round((guinnessCount / totalBeers) * 100) : 0;
+              const otherPercent = totalBeers > 0 ? 100 - guinnessPercent : 0;
+              
+              const angleDegrees = 180 - (guinnessPercent / 100) * 180;
+              const angleRad = (angleDegrees * Math.PI) / 180;
+              const cx = 100;
+              const cy = 100;
+              const needleLen = 58;
+              const nx = cx + needleLen * Math.cos(angleRad);
+              const ny = cy - needleLen * Math.sin(angleRad);
 
-                // Zone and messages
-                let ratingTitle = "";
-                let ratingDesc = "";
-                let ratingColorClass = "";
-                let ratingBg = "";
-                let ratingBorder = "";
+              let ratingDesc = "";
+              let ratingBg = "";
+              let ratingBorder = "";
 
-                if (guinnessPercent < 25) {
-                  ratingTitle = "Really Bad";
-                  ratingDesc = "🚨 Muddy and flat choices! Go find a pint of the black stuff immediately.";
-                  ratingColorClass = "text-rose-500";
-                  ratingBg = "bg-rose-500/5";
-                  ratingBorder = "border-rose-500/10";
-                } else if (guinnessPercent >= 25 && guinnessPercent < 75) {
-                  ratingTitle = "Adequate";
-                  ratingDesc = "⚖️ Average. Tolerable balance, but your soul still yearns for more creamy foam.";
-                  ratingColorClass = "text-amber-500";
-                  ratingBg = "bg-amber-500/5";
-                  ratingBorder = "border-amber-500/10";
-                } else {
-                  ratingTitle = "Creamy Goodness";
-                  ratingDesc = "✨ Stout Heaven! Absolute velvet perfection in your decision making.";
-                  ratingColorClass = "text-emerald-500";
-                  ratingBg = "bg-emerald-500/5";
-                  ratingBorder = "border-emerald-500/10";
-                }
-                
-                return (
-                  <div className="w-full flex flex-col items-center">
-                    {/* Gauge Widget */}
-                    <div className="w-full max-w-[280px] aspect-[1.8/1] relative flex items-center justify-center">
-                      <svg className="w-full h-full overflow-visible" viewBox="0 0 200 120">
-                        {/* Definitions for gold and guinness gradients */}
-                        <defs>
-                          <linearGradient id="pubGoldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" stopColor="#C5A059" />
-                            <stop offset="50%" stopColor="#E2C58F" />
-                            <stop offset="100%" stopColor="#8A662D" />
-                          </linearGradient>
-                          <linearGradient id="pubGuinnessGaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                            <stop offset="0%" stopColor="#7E7770" />
-                            <stop offset="45%" stopColor="#4A4139" />
-                            <stop offset="75%" stopColor="#1E1B18" />
-                            <stop offset="100%" stopColor="#0B0908" />
-                          </linearGradient>
-                          <linearGradient id="pubGoldRimGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                            <stop offset="0%" stopColor="#94A3B8" />
-                            <stop offset="50%" stopColor="#D97706" />
-                            <stop offset="100%" stopColor="#FBBF24" />
-                          </linearGradient>
-                          <filter id="pubGaugeShadow" x="-10%" y="-10%" width="120%" height="120%">
-                            <feDropShadow dx="0" dy="2" stdDeviation="2" floodOpacity="0.15" />
-                          </filter>
-                        </defs>
+              if (guinnessPercent < 25) {
+                ratingDesc = "🚨 Muddy and flat choices! Go find a pint of the black stuff immediately.";
+                ratingBg = "bg-rose-500/5";
+                ratingBorder = "border-rose-500/20";
+              } else if (guinnessPercent >= 25 && guinnessPercent < 75) {
+                ratingDesc = "⚖️ Average. Tolerable balance, but your soul still yearns for more creamy foam.";
+                ratingBg = "bg-amber-500/5";
+                ratingBorder = "border-amber-500/20";
+              } else {
+                ratingDesc = "✨ Stout Heaven! Absolute velvet perfection in your decision making.";
+                ratingBg = "bg-emerald-500/5";
+                ratingBorder = "border-emerald-500/20";
+              }
+              
+              return (
+                <div className="w-full flex flex-col items-center">
+                  {/* Gauge Widget */}
+                  <div className="w-full max-w-[240px] aspect-[1.8/1] relative flex items-center justify-center">
+                    <svg className="w-full h-full overflow-visible" viewBox="0 0 200 120">
+                      <defs>
+                        <linearGradient id="pubGoldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                          <stop offset="0%" stopColor="#C5A059" />
+                          <stop offset="50%" stopColor="#E2C58F" />
+                          <stop offset="100%" stopColor="#8A662D" />
+                        </linearGradient>
+                        <linearGradient id="pubGuinnessGaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                          <stop offset="0%" stopColor="#7E7770" />
+                          <stop offset="45%" stopColor="#4A4139" />
+                          <stop offset="75%" stopColor="#1E1B18" />
+                          <stop offset="100%" stopColor="#0B0908" />
+                        </linearGradient>
+                        <linearGradient id="pubGoldRimGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                          <stop offset="0%" stopColor="#94A3B8" />
+                          <stop offset="50%" stopColor="#D97706" />
+                          <stop offset="100%" stopColor="#FBBF24" />
+                        </linearGradient>
+                      </defs>
 
-                        {/* Gauge Arcs */}
-                        <path
-                          d="M 30,100 A 70,70 0 0,1 170,100"
-                          fill="none"
-                          stroke="#f1f5f9"
-                          strokeWidth="11"
+                      <path
+                        d="M 30,100 A 70,70 0 0,1 170,100"
+                        fill="none"
+                        stroke="#f1f5f9"
+                        strokeWidth="11"
+                        strokeLinecap="round"
+                      />
+
+                      <path
+                        d="M 30,100 A 70,70 0 0,1 170,100"
+                        fill="none"
+                        stroke="url(#pubGuinnessGaugeGrad)"
+                        strokeWidth="11"
+                        strokeLinecap="round"
+                      />
+
+                      <path
+                        d="M 24,100 A 76,76 0 0,1 176,100"
+                        fill="none"
+                        stroke="url(#pubGoldRimGrad)"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        opacity="0.9"
+                      />
+
+                      <g>
+                        <line
+                          x1={cx}
+                          y1={cy}
+                          x2={nx}
+                          y2={ny}
+                          stroke="#C5A059"
+                          strokeWidth="3.5"
                           strokeLinecap="round"
                         />
-
-                        <path
-                          d="M 30,100 A 70,70 0 0,1 170,100"
-                          fill="none"
-                          stroke="url(#pubGuinnessGaugeGrad)"
-                          strokeWidth="11"
-                          strokeLinecap="round"
-                        />
-
-                        <path
-                          d="M 24,100 A 76,76 0 0,1 176,100"
-                          fill="none"
-                          stroke="url(#pubGoldRimGrad)"
-                          strokeWidth="1.5"
-                          strokeLinecap="round"
-                          opacity="0.9"
-                        />
-
-                        <path
-                          d="M 36,100 A 64,64 0 0,1 164,100"
-                          fill="none"
-                          stroke="url(#pubGoldRimGrad)"
+                        <line
+                          x1={cx}
+                          y1={cy}
+                          x2={nx}
+                          y2={ny}
+                          stroke="#1E1B18"
                           strokeWidth="1"
                           strokeLinecap="round"
-                          opacity="0.4"
                         />
+                        <circle cx={cx} cy={cy} r="8" fill="url(#pubGoldGrad)" />
+                        <circle cx={cx} cy={cy} r="4" fill="#1E1B18" />
+                        <circle cx={cx} cy={cy} r="1.5" fill="#FDFBF7" />
+                      </g>
 
-                        {/* Center Needle & Pivot */}
-                        <g filter="url(#pubGaugeShadow)">
-                          <line
-                            x1={cx}
-                            y1={cy}
-                            x2={nx}
-                            y2={ny}
-                            stroke="#C5A059"
-                            strokeWidth="3.5"
-                            strokeLinecap="round"
-                          />
-                          <line
-                            x1={cx}
-                            y1={cy}
-                            x2={nx}
-                            y2={ny}
-                            stroke="#1E1B18"
-                            strokeWidth="1"
-                            strokeLinecap="round"
-                          />
-                          <circle cx={cx} cy={cy} r="8" fill="url(#pubGoldGrad)" />
-                          <circle cx={cx} cy={cy} r="4" fill="#1E1B18" />
-                          <circle cx={cx} cy={cy} r="1.5" fill="#FDFBF7" />
-                        </g>
+                      <text x="21" y="118" textAnchor="middle" className="text-[9px] font-extrabold fill-slate-400 uppercase">0%</text>
+                      <text x="179" y="118" textAnchor="middle" className="text-[9px] font-extrabold fill-slate-400 uppercase">100%</text>
+                      <text x="100" y="15" textAnchor="middle" fill="url(#pubGoldGrad)" className="text-[20px] font-black font-mono tracking-tight">{guinnessPercent}%</text>
+                    </svg>
+                  </div>
 
-                        {/* Gauge Labels & Ticks */}
-                        <text x="21" y="118" textAnchor="middle" className="text-[9px] font-extrabold fill-slate-400 uppercase tracking-wider">0%</text>
-                        <text x="179" y="118" textAnchor="middle" className="text-[9px] font-extrabold fill-slate-400 uppercase tracking-wider">100%</text>
-                        
-                        {/* Floating percentage readout */}
-                        <text x="100" y="15" textAnchor="middle" fill="url(#pubGoldGrad)" className="text-[22px] font-black font-mono tracking-tight">{guinnessPercent}%</text>
-                      </svg>
+                  {/* Rating review banner */}
+                  <div className={`w-full max-w-sm mt-2 p-3 rounded-xl border ${ratingBg} ${ratingBorder} text-center shadow-xs`}>
+                    <p className="text-xs font-bold text-slate-700 dark:text-slate-300 leading-relaxed">
+                      {ratingDesc}
+                    </p>
+                  </div>
+                  
+                  {/* Legend / Details */}
+                  <div className="w-full mt-3 flex flex-col gap-2 max-w-sm mx-auto">
+                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/20 shadow-2xs">
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-3.5 h-3.5 rounded-md shrink-0 bg-[#FDFBF7] border-2 border-[#C5A059]" />
+                        <span className="font-extrabold text-xs text-slate-800 dark:text-slate-200">Creamy Pint of Guinness</span>
+                      </div>
+                      <span className="font-mono text-xs font-black text-amber-600 dark:text-amber-400">{guinnessCount} ({guinnessPercent}%)</span>
                     </div>
 
-                    {/* Playful rating review banner */}
-                    <div className={`w-full max-w-sm mt-2 p-3 rounded-xl border ${ratingBg} ${ratingBorder} text-center shadow-sm`}>
-                      <p className="text-xs font-bold text-slate-700 leading-relaxed font-sans">
-                        {ratingDesc}
-                      </p>
-                    </div>
-                    
-                    {/* High-Contrast Custom Legend/Details */}
-                    <div className="w-full mt-4 flex flex-col gap-2 max-w-sm mx-auto">
-                      {/* Creamy Pint of Guinness */}
-                      <div className="flex items-center justify-between p-3 rounded-xl bg-amber-500/5 border border-amber-500/15 shadow-sm transition-all">
-                        <div className="flex items-center gap-3">
-                          <span className="w-4 h-4 rounded-md shrink-0 bg-[#FDFBF7] border-2 border-[#C5A059] shadow-sm flex items-center justify-center">
-                            <span className="w-1.5 h-1.5 rounded-sm bg-[#C5A059]" />
-                          </span>
-                          <div className="flex flex-col">
-                            <span className="font-extrabold text-xs text-slate-800 font-sans tracking-tight">Creamy Pint of Guinness</span>
-                            <span className="text-[10px] text-amber-600 font-bold uppercase tracking-wider">Creamy Goodness 🍻</span>
-                          </div>
-                        </div>
-                        <div className="text-right flex flex-col items-end">
-                          <span className="font-mono text-xs font-black text-slate-800">{guinnessCount} {guinnessCount === 1 ? "pint" : "pints"}</span>
-                          <span className="font-sans text-[10px] text-amber-600 font-bold">{guinnessPercent}%</span>
-                        </div>
+                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 shadow-2xs">
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-3.5 h-3.5 rounded-md shrink-0 bg-[#7E7770] border-2 border-[#645F5A]" />
+                        <span className="font-extrabold text-xs text-slate-600 dark:text-slate-400">Not a Guinness</span>
                       </div>
-
-                      {/* Not a Guinness */}
-                      <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100 shadow-sm transition-all opacity-85">
-                        <div className="flex items-center gap-3">
-                          <span className="w-4 h-4 rounded-md shrink-0 bg-[#7E7770] border-2 border-[#645F5A] shadow-sm flex items-center justify-center">
-                            <span className="w-1.5 h-1.5 rounded-sm bg-[#645F5A]" />
-                          </span>
-                          <div className="flex flex-col">
-                            <span className="font-extrabold text-xs text-slate-600 font-sans tracking-tight">Not a Guinness</span>
-                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Flat & Muddy 🌧️</span>
-                          </div>
-                        </div>
-                        <div className="text-right flex flex-col items-end">
-                          <span className="font-mono text-xs font-bold text-slate-500">{otherCount} {otherCount === 1 ? "pint" : "pints"}</span>
-                          <span className="font-sans text-[10px] text-slate-400 font-bold">{otherPercent}%</span>
-                        </div>
-                      </div>
+                      <span className="font-mono text-xs font-bold text-slate-500 dark:text-slate-400">{otherCount} ({otherPercent}%)</span>
                     </div>
                   </div>
-                );
-              })()}
-            </div>
+                </div>
+              );
+            })()}
           </div>
+        </div>
+      )}
       {/* Modal to Establish Pub */}
       <AnimatePresence>
         {showCreateModal && (

@@ -6,13 +6,109 @@ import { BeerLog, UserProfile, AppNotification, Pub, PubChatMessage } from "./sr
 import { normalizeBeerName } from "./src/data/beerCatalog";
 import { initializeApp } from "firebase/app";
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, orderBy, where, writeBatch, limit, onSnapshot, runTransaction } from "firebase/firestore";
-import { initializeApp as initializeAdminApp, getApps as getAdminApps, applicationDefault } from "firebase-admin/app";
+import { getStorage, ref, uploadString, getDownloadURL } from "firebase/storage";
+import { initializeApp as initializeAdminApp, getApps as getAdminApps, applicationDefault, cert } from "firebase-admin/app";
 import { getMessaging } from "firebase-admin/messaging";
 
 const app = express();
 const PORT = 3000;
 
 app.use(express.json({ limit: "15mb" }));
+
+// Static uploads directory for images
+const uploadsDir = path.join(process.cwd(), "public", "uploads");
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+app.use("/uploads", express.static(uploadsDir));
+
+let firebaseStorage: any = null;
+
+function getStorageInstance(): any {
+  if (firebaseStorage !== null) return firebaseStorage;
+  try {
+    const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      if (config.projectId) {
+        const firebaseApp = initializeApp(config);
+        firebaseStorage = getStorage(firebaseApp);
+        console.log("[Storage] Initialized Firebase Storage JS SDK successfully.");
+      }
+    }
+  } catch (err) {
+    console.error("[Storage] Failed to initialize Firebase Storage JS SDK:", err);
+    firebaseStorage = null;
+  }
+  return firebaseStorage;
+}
+
+// Helper function to convert base64 data URI to a static uploaded image file (fallback)
+function saveBase64ToImageFile(base64Data: string): string {
+  if (!base64Data || typeof base64Data !== "string") return base64Data;
+  if (!base64Data.startsWith("data:image/")) {
+    return base64Data; // Already a URL or empty
+  }
+  try {
+    const matches = base64Data.match(/^data:image\/([a-zA-Z0-9-+.]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) return base64Data;
+    const ext = matches[1] === "jpeg" ? "jpg" : matches[1] || "jpg";
+    const dataBuffer = Buffer.from(matches[2], "base64");
+    const filename = `photo-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${ext}`;
+    const filePath = path.join(uploadsDir, filename);
+    fs.writeFileSync(filePath, dataBuffer);
+    const publicUrl = `/uploads/${filename}`;
+    console.log(`[Upload] Converted base64 (${base64Data.length} chars) to local file ${publicUrl}`);
+    return publicUrl;
+  } catch (err) {
+    console.error("[Upload] Failed to save base64 image to disk:", err);
+    return base64Data;
+  }
+}
+
+async function saveBase64ToStorage(base64Data: string): Promise<string> {
+  if (!base64Data || typeof base64Data !== "string") return base64Data;
+  if (!base64Data.startsWith("data:image/")) {
+    return base64Data; // Already a URL or empty
+  }
+  try {
+    const matches = base64Data.match(/^data:image\/([a-zA-Z0-9-+.]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) return base64Data;
+    const ext = matches[1] === "jpeg" ? "jpg" : matches[1] || "jpg";
+
+    const storage = getStorageInstance();
+    if (storage) {
+      const filename = `photos/photo-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${ext}`;
+      const storageRef = ref(storage, filename);
+      await uploadString(storageRef, base64Data, "data_url");
+      const downloadUrl = await getDownloadURL(storageRef);
+      console.log(`[Storage] Uploaded base64 (${base64Data.length} chars) to Firebase Storage: ${downloadUrl}`);
+      return downloadUrl;
+    } else {
+      console.warn("[Storage] Firebase Storage unavailable, falling back to local file.");
+      return saveBase64ToImageFile(base64Data);
+    }
+  } catch (err) {
+    console.error("[Storage] Failed to upload image to Firebase Storage, falling back to local file:", err);
+    return saveBase64ToImageFile(base64Data);
+  }
+}
+
+// Endpoint to upload base64 images and get back a short Storage download URL
+app.post("/api/upload-image", async (req, res) => {
+  try {
+    const { image } = req.body;
+    if (!image || typeof image !== "string") {
+      res.status(400).json({ error: "Missing image string" });
+      return;
+    }
+    const url = await saveBase64ToStorage(image);
+    res.json({ url });
+  } catch (err: any) {
+    console.error("Error in /api/upload-image:", err);
+    res.status(500).json({ error: "Failed to upload image" });
+  }
+});
 
 // --- FIRESTORE PERSISTENCE ---
 let db: any = null;
@@ -26,7 +122,8 @@ const DEFAULT_USERS: UserProfile[] = [
     joinedDate: "2026-06-01",
     avatar: "🍻",
     bio: "Love dry-hopped double IPAs. Drinking in moderation... usually.",
-    password: "Pints!"
+    password: "Pints!",
+    email: "quin@beerreal.com"
   },
   {
     username: "Sam",
@@ -34,7 +131,8 @@ const DEFAULT_USERS: UserProfile[] = [
     joinedDate: "2026-06-03",
     avatar: "☕",
     bio: "Stout season is all year round. The darker, the better.",
-    password: "Pints!"
+    password: "Pints!",
+    email: "sam@beerreal.com"
   },
   {
     username: "Alex",
@@ -42,7 +140,8 @@ const DEFAULT_USERS: UserProfile[] = [
     joinedDate: "2026-06-05",
     avatar: "🍋",
     bio: "Sour and wild fermentation enthusiast. Can't resist a good Gose.",
-    password: "Pints!"
+    password: "Pints!",
+    email: "alex@beerreal.com"
   },
   {
     username: "Taylor",
@@ -50,7 +149,8 @@ const DEFAULT_USERS: UserProfile[] = [
     joinedDate: "2026-06-10",
     avatar: "🍺",
     bio: "Keep it crispy. Dedicated lager and craft pilsner fan.",
-    password: "Pints!"
+    password: "Pints!",
+    email: "taylor@beerreal.com"
   },
   {
     username: "Jordan",
@@ -58,7 +158,8 @@ const DEFAULT_USERS: UserProfile[] = [
     joinedDate: "2026-06-15",
     avatar: "🍊",
     bio: "Juicy, tropical hazy IPAs are life. Citra & Mosaic hops please!",
-    password: "Pints!"
+    password: "Pints!",
+    email: "jordan@beerreal.com"
   }
 ];
 
@@ -292,14 +393,54 @@ let fcmAvailable = false;
 let fcmPermissionDenied = false;
 try {
   const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+  const serviceAccountPath = path.join(process.cwd(), "serviceAccountKey.json");
+  const altServiceAccountPath = path.join(process.cwd(), "service-account.json");
+  
+  let credentialToUse = null;
+  
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+    try {
+      const sa = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+      credentialToUse = cert(sa);
+      console.log("[FCM Server] Using Firebase Admin Service Account credentials from environment variable.");
+    } catch (e) {
+      console.warn("[FCM Server] Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY env var:", e);
+    }
+  }
+
+  if (!credentialToUse && fs.existsSync(serviceAccountPath)) {
+    try {
+      const sa = JSON.parse(fs.readFileSync(serviceAccountPath, "utf8"));
+      credentialToUse = cert(sa);
+      console.log("[FCM Server] Using Firebase Admin Service Account credentials from serviceAccountKey.json");
+    } catch (e) {
+      console.warn("[FCM Server] Failed to read serviceAccountKey.json:", e);
+    }
+  }
+
+  if (!credentialToUse && fs.existsSync(altServiceAccountPath)) {
+    try {
+      const sa = JSON.parse(fs.readFileSync(altServiceAccountPath, "utf8"));
+      credentialToUse = cert(sa);
+      console.log("[FCM Server] Using Firebase Admin Service Account credentials from service-account.json");
+    } catch (e) {
+      console.warn("[FCM Server] Failed to read service-account.json:", e);
+    }
+  }
+
+  if (!credentialToUse) {
+    credentialToUse = applicationDefault();
+    console.log("[FCM Server] Using Application Default Credentials (ADC).");
+  }
+
   if (fs.existsSync(configPath)) {
     const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
     initializeAdminApp({
       projectId: config.projectId,
-      credential: applicationDefault()
+      credential: credentialToUse
     });
     fcmAvailable = true;
-    console.log("[FCM Server] Firebase Admin SDK initialized successfully with ADC.");
+    console.log("[FCM Server] Firebase Admin SDK initialized successfully.");
   }
 } catch (err) {
   console.log("[FCM Server] Firebase Admin SDK running in simulation mode:", err);
@@ -445,8 +586,8 @@ async function sendFCMNotification(targetUser: string | null, title: string, bod
           notification: {
             title: title,
             body: body,
-            icon: "/icon.svg",
-            badge: "/icon.svg",
+            icon: "/icon-192.png",
+            badge: "/icon-192.png",
             tag: payload.notificationId || payload.id || "beerreal-notif"
           },
           fcm_options: {
@@ -505,9 +646,9 @@ async function sendFcmPushForNotification(notif: AppNotification) {
     return;
   }
 
-  const title = `BeerReal Alert! 🍻`;
+  const notifUser = notif.user;
+  const title = notifUser ? `${notifUser} 🍻` : "🍻 Pint Alert";
   const cleanText = notif.text.replace(/<[^>]*>/g, "");
-  const notifUser = notif.user ? notif.user.trim() : "";
   const body = notifUser && !cleanText.toLowerCase().startsWith(notifUser.toLowerCase())
     ? `${notifUser} ${cleanText}`
     : cleanText;
@@ -578,17 +719,35 @@ async function sendFcmPushForNotification(notif: AppNotification) {
   }
 }
 
-// Helper to recursively strip out undefined values before saving to Firestore (since setDoc throws on undefined fields)
+// Helper to recursively strip out undefined values and enforce a 50KB field size safeguard
 function sanitizeForFirestore<T extends Record<string, any>>(obj: T): Record<string, any> {
   if (!obj || typeof obj !== "object") return obj;
   if (Array.isArray(obj)) {
     return obj.map((item) => (typeof item === "object" && item !== null ? sanitizeForFirestore(item) : item));
   }
   const clean: Record<string, any> = {};
+  const MAX_FIELD_BYTES = 50 * 1024; // 50KB hard size limit per field
+
   for (const [key, value] of Object.entries(obj)) {
     if (value !== undefined) {
       if (value !== null && typeof value === "object" && !(value instanceof Date)) {
         clean[key] = sanitizeForFirestore(value);
+      } else if (typeof value === "string") {
+        let strVal = value;
+        // Auto-convert any base64 image field to a saved file URL if it slipped through
+        if ((key === "imageUrl" || key === "avatar") && strVal.startsWith("data:image/")) {
+          strVal = saveBase64ToImageFile(strVal);
+        }
+        // Enforce 50KB size safeguard
+        if (strVal.length > MAX_FIELD_BYTES) {
+          console.warn(`[Firestore Safeguard] Field "${key}" exceeds size safeguard (${strVal.length} chars > ${MAX_FIELD_BYTES}). Stripped raw data to protect Firestore.`);
+          if (strVal.startsWith("data:")) {
+            strVal = ""; // Strip raw base64 data completely if unsavable
+          } else {
+            strVal = strVal.substring(0, 1000); // Truncate text
+          }
+        }
+        clean[key] = strVal;
       } else {
         clean[key] = value;
       }
@@ -718,7 +877,9 @@ function getDayDifference(dateStr1: string, dateStr2: string): number {
 async function recalculateAndCacheUserStats(username: string): Promise<any> {
   const allBeersList = await getAllBeers();
   const userLogs = allBeersList.filter(
-    (l) => l.user.toLowerCase() === username.toLowerCase()
+    (l) => l.user.toLowerCase() === username.toLowerCase() &&
+      (!l.reactions?.dislike || l.reactions.dislike.length < 3) &&
+      (!l.reactions?.imposter || l.reactions.imposter.length < 3)
   );
 
   const totalPints = userLogs.length;
@@ -880,6 +1041,9 @@ async function deleteUser(username: string): Promise<boolean> {
   return false;
 }
 
+// In-memory store for fast instant response and local fallback
+let inMemoryBeers: BeerLog[] = [];
+
 // Helper to get all beers
 async function getAllBeers(): Promise<BeerLog[]> {
   const firestore = getFirestoreInstance();
@@ -898,16 +1062,34 @@ async function getAllBeers(): Promise<BeerLog[]> {
     }
   }
 
-  if (list.length === 0) {
-    list = DEFAULT_BEERS;
+  // Merge list with inMemoryBeers
+  const seenIds = new Set<string>();
+  const merged: BeerLog[] = [];
+
+  list.forEach((b) => {
+    if (b && b.id && !seenIds.has(b.id)) {
+      seenIds.add(b.id);
+      merged.push(b);
+    }
+  });
+
+  inMemoryBeers.forEach((b) => {
+    if (b && b.id && !seenIds.has(b.id)) {
+      seenIds.add(b.id);
+      merged.push(b);
+    }
+  });
+
+  if (merged.length === 0) {
+    merged.push(...DEFAULT_BEERS);
   }
 
   // Sort beers in descending date order
-  list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  merged.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   // Auto-correct & normalize beer names
   let updatedCount = 0;
-  const cleanedList = list.map((b) => {
+  const cleanedList = merged.map((b) => {
     if (!b.beerName) return b;
     const normalized = normalizeBeerName(b.beerName);
     const newName = normalized.name || b.beerName;
@@ -925,6 +1107,8 @@ async function getAllBeers(): Promise<BeerLog[]> {
     }
     return b;
   });
+
+  inMemoryBeers = cleanedList;
 
   if (updatedCount > 0 && firestore && useFirestore) {
     try {
@@ -944,6 +1128,14 @@ async function getAllBeers(): Promise<BeerLog[]> {
 
 // Helper to save beer log
 async function saveBeerLog(log: BeerLog): Promise<BeerLog> {
+  // Always update inMemoryBeers immediately
+  const existingIdx = inMemoryBeers.findIndex((b) => b.id === log.id);
+  if (existingIdx !== -1) {
+    inMemoryBeers[existingIdx] = log;
+  } else {
+    inMemoryBeers.unshift(log);
+  }
+
   const firestore = getFirestoreInstance();
   if (firestore && useFirestore) {
     try {
@@ -971,9 +1163,7 @@ function isGuinnessBeerName(name: string | undefined | null): boolean {
 }
 
 function generateCreativeBeerNotificationText(beerName: string, abv: number, dateStr: string, hadCig: boolean, todayCount: number): string {
-  const hasCustomName = isUserCustomBeerName(beerName);
   const isGuinness = isGuinnessBeerName(beerName);
-  const cleanBeerName = hasCustomName ? `<strong>${beerName.trim()}</strong>` : "";
   const cigSfx = hadCig ? " 🚬" : "";
 
   // Get hour from ISO date string
@@ -988,158 +1178,88 @@ function generateCreativeBeerNotificationText(beerName: string, abv: number, dat
   // SPECIAL GUINNESS NOTIFICATION
   if (isGuinness) {
     const guinnessOptions = [
-      `is pouring a majestic black pint of ${cleanBeerName || "Guinness"}! 🖤🇮🇪🍺 Sláinte!${cigSfx}`,
-      `is settling a smooth, creamy pint of ${cleanBeerName || "Guinness"}! 🇮🇪🍺 Good things come to those who wait!${cigSfx}`,
-      `just poured the dark stuff: a lovely pint of ${cleanBeerName || "Guinness"}! 🖤🍻 Sláinte!${cigSfx}`,
-      `is enjoying a perfectly settled velvet pint of ${cleanBeerName || "Guinness"}! 🖤🍺 Sláinte!${cigSfx}`
+      `is pouring a majestic black pint of Guinness! 🖤🇮🇪🍺 Sláinte!${cigSfx}`,
+      `is settling a smooth, creamy pint of Guinness! 🇮🇪🍺 Good things come to those who wait!${cigSfx}`,
+      `just poured the dark stuff: a lovely pint of Guinness! 🖤🍻 Sláinte!${cigSfx}`,
+      `is enjoying a perfectly settled velvet pint of Guinness! 🖤🍺 Sláinte!${cigSfx}`
     ];
     return guinnessOptions[Math.floor(Math.random() * guinnessOptions.length)];
   }
 
   // 1st of the day!
   if (todayCount === 1) {
-    if (hasCustomName) {
-      const options = [
-        `is kickstarting their day with their <strong>1st pint</strong>: a crisp ${cleanBeerName}! 🌅🍺${cigSfx}`,
-        `is opening the floodgates! <strong>First pint of the day</strong> is a cold ${cleanBeerName}! 🔓🍻${cigSfx}`,
-        `is wetting their whistle with the debut pint of the day: ${cleanBeerName}! 🎨🍺${cigSfx}`,
-        `is officially in play! <strong>1st pint</strong> of the day: ${cleanBeerName}! 🚩🍻${cigSfx}`
-      ];
-      return options[Math.floor(Math.random() * options.length)];
-    } else {
-      const options = [
-        `is kickstarting their day with a cold <strong>1st pint</strong>! 🌅🍺${cigSfx}`,
-        `is opening the floodgates with their <strong>first pint of the day</strong>! 🔓🍻${cigSfx}`,
-        `is wetting their whistle with the debut pint of the day! 🎨🍺${cigSfx}`,
-        `is officially in play with their <strong>1st pint</strong>! 🚩🍻${cigSfx}`
-      ];
-      return options[Math.floor(Math.random() * options.length)];
-    }
+    const options = [
+      `is kickstarting their day with a cold <strong>1st pint</strong>! 🌅🍺${cigSfx}`,
+      `is opening the floodgates with their <strong>first pint of the day</strong>! 🔓🍻${cigSfx}`,
+      `is wetting their whistle with the debut pint of the day! 🎨🍺${cigSfx}`,
+      `is officially in play with their <strong>1st pint</strong>! 🚩🍻${cigSfx}`
+    ];
+    return options[Math.floor(Math.random() * options.length)];
   }
 
   // Early morning (before 11 AM)
   if (hour < 11) {
-    if (hasCustomName) {
-      const options = [
-        `is starting shockingly early! An early-morning pint of ${cleanBeerName}! 🌅👀${cigSfx}`,
-        `believes it's five o'clock somewhere! Breakfast beer: ${cleanBeerName}! 🍳🍺${cigSfx}`,
-        `is beating the sun with an early doors ${cleanBeerName}! 🐓🍻${cigSfx}`
-      ];
-      return options[Math.floor(Math.random() * options.length)];
-    } else {
-      const options = [
-        `is starting shockingly early with a morning pint! 🌅👀${cigSfx}`,
-        `believes it's five o'clock somewhere! Breakfast pint! 🍳🍺${cigSfx}`,
-        `is beating the sun with an early doors pint! 🐓🍻${cigSfx}`
-      ];
-      return options[Math.floor(Math.random() * options.length)];
-    }
+    const options = [
+      `is starting shockingly early with a morning pint! 🌅👀${cigSfx}`,
+      `believes it's five o'clock somewhere! Breakfast pint! 🍳🍺${cigSfx}`,
+      `is beating the sun with an early doors pint! 🐓🍻${cigSfx}`
+    ];
+    return options[Math.floor(Math.random() * options.length)];
   }
 
   // High ABV (>= 8%)
   if (abv >= 8) {
-    if (hasCustomName) {
-      const options = [
-        `is playing with fire! Sinking a heavy ${cleanBeerName} (${abv}% ABV)! 🔥🥴${cigSfx}`,
-        `is tackling an absolute unit of a beer: ${cleanBeerName} at ${abv}%! 🥊🍺${cigSfx}`,
-        `is cruising in the fast lane with a strong ${cleanBeerName} (${abv}%)! 🚀🍻${cigSfx}`
-      ];
-      return options[Math.floor(Math.random() * options.length)];
-    } else {
-      const options = [
-        `is playing with fire! Sinking a heavy pint (${abv}% ABV)! 🔥🥴${cigSfx}`,
-        `is tackling an absolute unit of a pint at ${abv}% ABV! 🥊🍺${cigSfx}`,
-        `is cruising in the fast lane with a strong pint (${abv}%)! 🚀🍻${cigSfx}`
-      ];
-      return options[Math.floor(Math.random() * options.length)];
-    }
+    const options = [
+      `is playing with fire! Sinking a heavy pint (${abv}% ABV)! 🔥🥴${cigSfx}`,
+      `is tackling an absolute unit of a pint at ${abv}% ABV! 🥊🍺${cigSfx}`,
+      `is cruising in the fast lane with a strong pint (${abv}%)! 🚀🍻${cigSfx}`
+    ];
+    return options[Math.floor(Math.random() * options.length)];
   }
 
   // Low ABV (<= 0.5% and > 0)
   if (abv <= 0.5 && abv > 0) {
-    if (hasCustomName) {
-      const options = [
-        `is staying responsible with a sober-safe ${cleanBeerName} (${abv}% ABV)! 😇🌱${cigSfx}`,
-        `is pacing themselves with a clear-headed ${cleanBeerName} (${abv}%)! 🧠🍻${cigSfx}`
-      ];
-      return options[Math.floor(Math.random() * options.length)];
-    } else {
-      const options = [
-        `is staying responsible with a sober-safe pint (${abv}% ABV)! 😇🌱${cigSfx}`,
-        `is pacing themselves with a clear-headed pint (${abv}%)! 🧠🍻${cigSfx}`
-      ];
-      return options[Math.floor(Math.random() * options.length)];
-    }
+    const options = [
+      `is staying responsible with a sober-safe pint (${abv}% ABV)! 😇🌱${cigSfx}`,
+      `is pacing themselves with a clear-headed pint (${abv}%)! 🧠🍻${cigSfx}`
+    ];
+    return options[Math.floor(Math.random() * options.length)];
   }
 
   // Lunch pint (between 12 PM and 2 PM, i.e. 12 and 13)
   if (hour >= 12 && hour < 14) {
-    if (hasCustomName) {
-      const options = [
-        `is enjoying a sneaky lunch pint of ${cleanBeerName}! Shhh... 🤫🍔🍺${cigSfx}`,
-        `is taking a very productive 'working lunch' with a ${cleanBeerName}! 💼🍻${cigSfx}`,
-        `is supplementing their diet with a liquid lunch: ${cleanBeerName}! 🥗🍺${cigSfx}`
-      ];
-      return options[Math.floor(Math.random() * options.length)];
-    } else {
-      const options = [
-        `is enjoying a sneaky lunch pint! Shhh... 🤫🍔🍺${cigSfx}`,
-        `is taking a very productive 'working lunch' with a cold pint! 💼🍻${cigSfx}`,
-        `is supplementing their diet with a liquid lunch! 🥗🍺${cigSfx}`
-      ];
-      return options[Math.floor(Math.random() * options.length)];
-    }
+    const options = [
+      `is enjoying a sneaky lunch pint! Shhh... 🤫🍔🍺${cigSfx}`,
+      `is taking a very productive 'working lunch' with a cold pint! 💼🍻${cigSfx}`,
+      `is supplementing their diet with a liquid lunch! 🥗🍺${cigSfx}`
+    ];
+    return options[Math.floor(Math.random() * options.length)];
   }
 
   // Late Night (after 11 PM or before 4 AM)
   if (hour >= 23 || hour < 4) {
-    if (hasCustomName) {
-      const options = [
-        `is howling at the moon with a late-night ${cleanBeerName}! 🌕🐺${cigSfx}`,
-        `is refusing to let the night end! Sinking a midnight ${cleanBeerName}! 🦉🍻${cigSfx}`,
-        `is burning the midnight oil with a dark-hours ${cleanBeerName}! 🕯️🍺${cigSfx}`
-      ];
-      return options[Math.floor(Math.random() * options.length)];
-    } else {
-      const options = [
-        `is howling at the moon with a late-night pint! 🌕🐺${cigSfx}`,
-        `is refusing to let the night end! Sinking a midnight pint! 🦉🍻${cigSfx}`,
-        `is burning the midnight oil with a dark-hours pint! 🕯️🍺${cigSfx}`
-      ];
-      return options[Math.floor(Math.random() * options.length)];
-    }
+    const options = [
+      `is howling at the moon with a late-night pint! 🌕🐺${cigSfx}`,
+      `is refusing to let the night end! Sinking a midnight pint! 🦉🍻${cigSfx}`,
+      `is burning the midnight oil with a dark-hours pint! 🕯️🍺${cigSfx}`
+    ];
+    return options[Math.floor(Math.random() * options.length)];
   }
 
   // Standard but creative notifications for general logs
-  if (hasCustomName) {
-    const generalOptions = [
-      `is sinking a crisp pint of ${cleanBeerName}! 🍺${cigSfx}`,
-      `is wetting their whistle with a lovely ${cleanBeerName}! 🍻${cigSfx}`,
-      `just poured a glorious, frothy ${cleanBeerName}! ✨🍺${cigSfx}`,
-      `is absolutely demolishing a cold ${cleanBeerName}! 🦖🍻${cigSfx}`,
-      `is taking a big pull of ${cleanBeerName}! Down the hatch! 🌊🍺${cigSfx}`,
-      `is treating themselves to a well-earned ${cleanBeerName}! 🎯🍻${cigSfx}`,
-      `is enjoying the nectar of the gods: ${cleanBeerName}! 🍯🍺${cigSfx}`,
-      `is keeping the good times rolling with a ${cleanBeerName}! 🔄🍻${cigSfx}`,
-      `is having some quality pub chat over a cold ${cleanBeerName}! 🗣️🍺${cigSfx}`,
-      `is sinking a majestic pint of ${cleanBeerName}! 🏰🍺${cigSfx}`
-    ];
-    return generalOptions[Math.floor(Math.random() * generalOptions.length)];
-  } else {
-    const generalOptions = [
-      `is sinking a crisp pint! 🍺${cigSfx}`,
-      `is wetting their whistle with a lovely pint! 🍻${cigSfx}`,
-      `just poured a cold one! Down the hatch! ✨🍺${cigSfx}`,
-      `is absolutely demolishing a cold pint! 🦖🍻${cigSfx}`,
-      `is taking a big pull! Down the hatch! 🌊🍺${cigSfx}`,
-      `is treating themselves to a well-earned pint! 🎯🍻${cigSfx}`,
-      `is enjoying the nectar of the gods! 🍯🍺${cigSfx}`,
-      `is keeping the good times rolling with a cold pint! 🔄🍻${cigSfx}`,
-      `is having some quality pub chat over a cold pint! 🗣️🍺${cigSfx}`,
-      `is sinking a majestic pint! 🏰🍺${cigSfx}`
-    ];
-    return generalOptions[Math.floor(Math.random() * generalOptions.length)];
-  }
+  const generalOptions = [
+    `is sinking a crisp pint! 🍺${cigSfx}`,
+    `is wetting their whistle with a lovely pint! 🍻${cigSfx}`,
+    `just poured a cold one! Down the hatch! ✨🍺${cigSfx}`,
+    `is absolutely demolishing a cold pint! 🦖🍻${cigSfx}`,
+    `is taking a big pull! Down the hatch! 🌊🍺${cigSfx}`,
+    `is treating themselves to a well-earned pint! 🎯🍻${cigSfx}`,
+    `is enjoying the nectar of the gods! 🍯🍺${cigSfx}`,
+    `is keeping the good times rolling with a cold pint! 🔄🍻${cigSfx}`,
+    `is having some quality pub chat over a cold pint! 🗣️🍺${cigSfx}`,
+    `is sinking a majestic pint! 🏰🍺${cigSfx}`
+  ];
+  return generalOptions[Math.floor(Math.random() * generalOptions.length)];
 }
 
 async function saveNotification(notif: AppNotification): Promise<AppNotification> {
@@ -1164,7 +1284,7 @@ interface CreateNotificationOptions {
   user: string;
   text: string;
   targetUser?: string;
-  type?: "post" | "comment" | "cheer" | "reaction" | "bender" | "invite" | "tag" | "imposter";
+  type?: "post" | "comment" | "cheer" | "reaction" | "bender" | "invite" | "tag" | "imposter" | "beacon" | "chat";
   date?: string;
   idPrefix?: string;
 }
@@ -1321,12 +1441,17 @@ async function markNotificationsRead(username: string): Promise<boolean> {
 // Helper to find a beer log by ID
 async function findBeerLogById(id: string): Promise<BeerLog | null> {
   if (!id) return null;
+  const inMem = inMemoryBeers.find((b) => b.id === id);
+  if (inMem) return inMem;
+
   const firestore = getFirestoreInstance();
   if (firestore && useFirestore) {
     try {
       const docSnap = await getDoc(doc(firestore, "beers", id));
       if (docSnap.exists()) {
-        return docSnap.data() as BeerLog;
+        const log = docSnap.data() as BeerLog;
+        inMemoryBeers.unshift(log);
+        return log;
       }
     } catch (err) {
       handleFirestoreError(err, "findBeerLogById");
@@ -1405,12 +1530,46 @@ async function toggleBeerReaction(id: string, username: string, reactionType: st
       }
     }
 
+    if (!updatedLog) {
+      // Local in-memory fallback
+      const log = inMemoryBeers.find((b) => b.id === id);
+      if (log) {
+        if (!log.cheers || !Array.isArray(log.cheers)) log.cheers = [];
+        if (!log.reactions || typeof log.reactions !== "object" || Array.isArray(log.reactions)) log.reactions = {};
+
+        if (reactionType === "cheers") {
+          const cheerIndex = log.cheers.indexOf(username);
+          if (cheerIndex === -1) log.cheers.push(username);
+          else log.cheers.splice(cheerIndex, 1);
+        }
+
+        if (!log.reactions[reactionType] || !Array.isArray(log.reactions[reactionType])) {
+          log.reactions[reactionType] = [];
+        }
+
+        const userIndex = log.reactions[reactionType].indexOf(username);
+        if (userIndex === -1) log.reactions[reactionType].push(username);
+        else log.reactions[reactionType].splice(userIndex, 1);
+
+        if (reactionType === "cheers") log.reactions["cheers"] = [...log.cheers];
+
+        await saveBeerLog(log);
+        updatedLog = log;
+      }
+    } else {
+      // Sync transaction result to inMemoryBeers
+      const idx = inMemoryBeers.findIndex((b) => b.id === id);
+      if (idx !== -1) inMemoryBeers[idx] = updatedLog;
+      else inMemoryBeers.unshift(updatedLog);
+    }
+
     return updatedLog;
   });
 }
 
 // Helper to delete a beer log
 async function deleteBeerLog(id: string): Promise<boolean> {
+  inMemoryBeers = inMemoryBeers.filter((b) => b.id !== id);
   const firestore = getFirestoreInstance();
   if (firestore && useFirestore) {
     try {
@@ -1421,7 +1580,7 @@ async function deleteBeerLog(id: string): Promise<boolean> {
       return false;
     }
   }
-  return false;
+  return true;
 }
 
 // Helper to add a comment to a beer log
@@ -1474,6 +1633,60 @@ async function deleteBeerComment(id: string, commentId: string): Promise<BeerLog
       await setDoc(doc(firestore, "beers", id), sanitizeForFirestore(log));
     } catch (err) {
       handleFirestoreError(err, "delete comment");
+    }
+  }
+  return log;
+}
+
+// Helper to toggle a reaction on a comment
+async function toggleCommentReaction(
+  id: string,
+  commentId: string,
+  user: string,
+  reaction: string
+): Promise<BeerLog | null> {
+  const log = await findBeerLogById(id);
+  if (!log || !log.comments) {
+    return null;
+  }
+
+  const commentIndex = log.comments.findIndex((c) => c.id === commentId);
+  if (commentIndex === -1) {
+    return null;
+  }
+
+  const comment = { ...log.comments[commentIndex] };
+  if (!comment.reactions || typeof comment.reactions !== "object" || Array.isArray(comment.reactions)) {
+    comment.reactions = {};
+  } else {
+    comment.reactions = { ...comment.reactions };
+  }
+
+  if (!comment.reactions[reaction] || !Array.isArray(comment.reactions[reaction])) {
+    comment.reactions[reaction] = [];
+  } else {
+    comment.reactions[reaction] = [...comment.reactions[reaction]];
+  }
+
+  const userIdx = comment.reactions[reaction].indexOf(user);
+  if (userIdx !== -1) {
+    comment.reactions[reaction].splice(userIdx, 1);
+  } else {
+    comment.reactions[reaction].push(user);
+  }
+
+  if (comment.reactions[reaction].length === 0) {
+    delete comment.reactions[reaction];
+  }
+
+  log.comments[commentIndex] = comment;
+
+  const firestore = getFirestoreInstance();
+  if (firestore && useFirestore) {
+    try {
+      await setDoc(doc(firestore, "beers", id), sanitizeForFirestore(log));
+    } catch (err) {
+      handleFirestoreError(err, "toggle comment reaction");
     }
   }
   return log;
@@ -1887,6 +2100,11 @@ app.post("/api/beers", async (req, res) => {
     const cleanedStyle = (beerStyle && beerStyle !== "Other") ? beerStyle : (normalized.style || beerStyle || "Lager");
     const cleanedAbv = Number(abv) || (normalized.abv || 5.0);
 
+    let processedImageUrl = imageUrl || undefined;
+    if (processedImageUrl && typeof processedImageUrl === "string" && processedImageUrl.startsWith("data:image/")) {
+      processedImageUrl = await saveBase64ToStorage(processedImageUrl);
+    }
+
     const newLog: BeerLog = {
       id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       user,
@@ -1897,7 +2115,7 @@ app.post("/api/beers", async (req, res) => {
       rating: Number(rating),
       cheers: [],
       comment: comment || "",
-      imageUrl: imageUrl || undefined,
+      imageUrl: processedImageUrl,
       hadCig: !!hadCig,
       pubId: pubId || undefined
     };
@@ -1916,20 +2134,23 @@ app.post("/api/beers", async (req, res) => {
           (l) => l.user === saved.user && l.date.split("T")[0] === checkInDateStr
         );
 
-        const notificationText = generateCreativeBeerNotificationText(
-          saved.beerName,
-          Number(saved.abv),
-          saved.date,
-          !!saved.hadCig,
-          userLogsToday.length
-        );
+        // 1. Only send global post notification for the FIRST beer of the day for that user
+        if (userLogsToday.length === 1) {
+          const notificationText = generateCreativeBeerNotificationText(
+            saved.beerName,
+            Number(saved.abv),
+            saved.date,
+            !!saved.hadCig,
+            userLogsToday.length
+          );
 
-        await createAndDispatchNotification({
-          user: saved.user,
-          text: notificationText,
-          date: saved.date,
-          type: "post",
-        });
+          await createAndDispatchNotification({
+            user: saved.user,
+            text: notificationText,
+            date: saved.date,
+            type: "post",
+          });
+        }
 
         // Trigger tag notifications if any valid users are tagged
         if (saved.comment) {
@@ -1949,11 +2170,12 @@ app.post("/api/beers", async (req, res) => {
           }
         }
 
-        if (userLogsToday.length >= 4) {
+        // 2. Only send global bender alert ONCE when they hit 4 beers in a single day
+        if (userLogsToday.length === 4) {
           await createAndDispatchNotification({
-            idPrefix: `notif-bender-${userLogsToday.length}`,
+            idPrefix: `notif-bender-4`,
             user: saved.user,
-            text: `🚨 BENDER ALERT! <strong>${saved.user}</strong> is on a bender! Logged pint #${userLogsToday.length} today! 🥴🔥🍻`,
+            text: `🚨 BENDER ALERT! <strong>${saved.user}</strong> is on a bender! Logged pint #4 today! 🥴🔥🍻`,
             date: saved.date,
             type: "bender",
           });
@@ -1982,14 +2204,17 @@ app.post("/api/beers/:id", async (req, res) => {
     const { id } = req.params;
     const { beerName, beerStyle, abv, rating, comment, hadCig } = req.body;
 
-    const allBeersList = await getAllBeers();
-    const logIndex = allBeersList.findIndex((b) => b.id === id);
-    if (logIndex === -1) {
+    let log = await findBeerLogById(id);
+    if (!log) {
+      const allBeersList = await getAllBeers();
+      log = allBeersList.find((b) => b.id === id) || null;
+    }
+
+    if (!log) {
       res.status(404).json({ error: "Beer log not found" });
       return;
     }
 
-    const log = allBeersList[logIndex];
     if (beerName !== undefined) log.beerName = beerName;
     if (beerStyle !== undefined) log.beerStyle = beerStyle;
     if (abv !== undefined) log.abv = Number(abv);
@@ -2035,9 +2260,9 @@ app.post("/api/beers/:id/cheers", async (req, res) => {
     try {
       if (updated.user && updated.user.toLowerCase() !== username.toLowerCase() && (updated.cheers || []).includes(username)) {
         const beerNameStr = updated.beerName ? String(updated.beerName) : "";
-        const hasCustom = isUserCustomBeerName(beerNameStr);
-        const notifText = hasCustom
-          ? `cheered your pint of <strong>${beerNameStr.trim()}</strong>! 🍻`
+        const isGuinness = isGuinnessBeerName(beerNameStr);
+        const notifText = isGuinness
+          ? `cheered your pint of <strong>Guinness</strong>! 🍻`
           : `cheered your pint! 🍻`;
         await createAndDispatchNotification({
           user: username,
@@ -2101,9 +2326,9 @@ app.post("/api/beers/:id/react", async (req, res) => {
         else if (reactionType === "dislike") reactionLabel = "Imposter Pint! 🕵️";
 
         const beerNameStr = updated.beerName ? String(updated.beerName) : "";
-        const hasCustom = isUserCustomBeerName(beerNameStr);
-        const notifText = hasCustom
-          ? `reacted with <strong>${reactionLabel}</strong> to your pint of <strong>${beerNameStr.trim()}</strong>!`
+        const isGuinness = isGuinnessBeerName(beerNameStr);
+        const notifText = isGuinness
+          ? `reacted with <strong>${reactionLabel}</strong> to your pint of <strong>Guinness</strong>!`
           : `reacted with <strong>${reactionLabel}</strong> to your pint!`;
 
         await createAndDispatchNotification({
@@ -2113,17 +2338,28 @@ app.post("/api/beers/:id/react", async (req, res) => {
           type: "reaction",
         });
 
+        // 3. Global notification ONLY when a pint is officially outed as an imposter (reaches 3 dislike/imposter votes)
         if (reactionType === "dislike") {
-          const imposterNotifText = hasCustom
-            ? `🚨 IMPOSTER PINT OUTED! 🕵️ caught <strong>${updated.user}</strong> logging a fake pint of <strong>${beerNameStr.trim()}</strong>!`
-            : `🚨 IMPOSTER PINT OUTED! 🕵️ caught <strong>${updated.user}</strong> logging a fake pint!`;
-          await createAndDispatchNotification({
-            idPrefix: "imposter",
-            user: username,
-            text: imposterNotifText,
-            type: "imposter",
-          });
+          const dislikeCount = (updated.reactions?.["dislike"]?.length || 0) + (updated.reactions?.["imposter"]?.length || 0);
+          if (dislikeCount === 3) {
+            const imposterNotifText = isGuinness
+              ? `🚨 IMPOSTER PINT OUTED! 🕵️ caught <strong>${updated.user}</strong> logging a fake pint of <strong>Guinness</strong>!`
+              : `🚨 IMPOSTER PINT OUTED! 🕵️ caught <strong>${updated.user}</strong> logging a fake pint!`;
+            await createAndDispatchNotification({
+              idPrefix: "imposter",
+              user: username,
+              text: imposterNotifText,
+              type: "imposter",
+            });
+          }
         }
+      }
+
+      // Recalculate stats for the post creator so stats remain up to date when voted imposter
+      if (updated.user) {
+        recalculateAndCacheUserStats(updated.user).catch((e) =>
+          console.error("Error recalculating stats after reaction toggle:", e)
+        );
       }
     } catch (err) {
       console.error("Failed to generate reaction notification:", err);
@@ -2188,9 +2424,9 @@ app.post("/api/beers/:id/comments", async (req, res) => {
   try {
     if (updated.user !== user) {
       const snippet = text.length > 30 ? text.substring(0, 30) + "..." : text;
-      const hasCustom = isUserCustomBeerName(updated.beerName);
-      const notifText = hasCustom
-        ? `commented on your pint of <strong>${updated.beerName.trim()}</strong>: "${snippet}" 💬`
+      const isGuinness = isGuinnessBeerName(updated.beerName);
+      const notifText = isGuinness
+        ? `commented on your pint of <strong>Guinness</strong>: "${snippet}" 💬`
         : `commented on your pint: "${snippet}" 💬`;
 
       await createAndDispatchNotification({
@@ -2253,6 +2489,42 @@ app.delete("/api/beers/:id/comments/:commentId", async (req, res) => {
   res.json(updated);
 });
 
+// POST Reaction to a Comment
+app.post("/api/beers/:id/comments/:commentId/reactions", async (req, res) => {
+  const { id, commentId } = req.params;
+  const { user, reaction } = req.body;
+
+  if (!user || !reaction) {
+    res.status(400).json({ error: "User and reaction are required" });
+    return;
+  }
+
+  const updated = await toggleCommentReaction(id, commentId, user, reaction);
+  if (!updated) {
+    res.status(404).json({ error: "Beer log or comment not found" });
+    return;
+  }
+
+  // Trigger notification if reacting to someone else's comment
+  try {
+    const comment = (updated.comments || []).find((c) => c.id === commentId);
+    if (comment && comment.user !== user) {
+      const snippet = comment.text.length > 25 ? comment.text.substring(0, 25) + "..." : comment.text;
+      await createAndDispatchNotification({
+        idPrefix: "notif-comment-react",
+        user: user,
+        targetUser: comment.user,
+        text: `reacted ${reaction} to your comment: "${snippet}"`,
+        type: "reaction",
+      });
+    }
+  } catch (err) {
+    console.error("Failed to generate comment reaction notification:", err);
+  }
+
+  res.json(updated);
+});
+
 // GET Notifications
 app.get("/api/notifications", async (req, res) => {
   const list = await getAllNotifications();
@@ -2272,19 +2544,22 @@ app.post("/api/notifications/read", async (req, res) => {
 
 // POST Login
 app.post("/api/login", async (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password) {
-    res.status(400).json({ error: "Username and password are required" });
+  const { username, email, identifier, password } = req.body;
+  const inputIdentifier = (identifier || username || email || "").toString().trim();
+  if (!inputIdentifier || !password) {
+    res.status(400).json({ error: "Username/Email and password are required" });
     return;
   }
 
   const allUsers = await getAllUsers();
   const user = allUsers.find(
-    (u) => u.username.toLowerCase() === username.toLowerCase()
+    (u) =>
+      u.username.toLowerCase() === inputIdentifier.toLowerCase() ||
+      (u.email && u.email.toLowerCase() === inputIdentifier.toLowerCase())
   );
 
   if (!user) {
-    res.status(401).json({ error: "User profile not found. Please create an account." });
+    res.status(401).json({ error: "User profile not found. Please check your username/email or create an account." });
     return;
   }
 
@@ -2305,7 +2580,7 @@ app.get("/api/users", async (req, res) => {
 
 // POST User Profile
 app.post("/api/users", async (req, res) => {
-  const { username, favoriteStyle, avatar, bio, password, realName, photoUrl } = req.body;
+  const { username, favoriteStyle, avatar, bio, password, realName, photoUrl, email } = req.body;
 
   if (!username || !favoriteStyle || !avatar) {
     res.status(400).json({ error: "Missing required profile fields" });
@@ -2319,6 +2594,20 @@ app.post("/api/users", async (req, res) => {
 
   const existingUser = existingIndex !== -1 ? allUsersList[existingIndex] : null;
 
+  // Check duplicate email if provided
+  if (email && email.trim()) {
+    const emailDup = allUsersList.find(
+      (u) =>
+        u.email &&
+        u.email.toLowerCase() === email.trim().toLowerCase() &&
+        u.username.toLowerCase() !== username.toLowerCase()
+    );
+    if (emailDup) {
+      res.status(400).json({ error: "This email address is already associated with another account." });
+      return;
+    }
+  }
+
   const profile: UserProfile = {
     username,
     favoriteStyle,
@@ -2327,7 +2616,8 @@ app.post("/api/users", async (req, res) => {
     joinedDate: existingUser ? existingUser.joinedDate : new Date().toISOString().split("T")[0],
     password: password || (existingUser ? (existingUser.password || "Pints!") : "Pints!"),
     realName: realName || (existingUser ? existingUser.realName : undefined),
-    photoUrl: photoUrl !== undefined ? photoUrl : (existingUser ? existingUser.photoUrl : undefined)
+    photoUrl: photoUrl !== undefined ? photoUrl : (existingUser ? existingUser.photoUrl : undefined),
+    email: email !== undefined ? (email.trim() || undefined) : (existingUser ? existingUser.email : undefined)
   };
 
   const isNewUser = !existingUser;
@@ -2413,6 +2703,46 @@ app.post("/api/pubs/:id/messages", async (req, res) => {
     };
 
     const saved = await savePubChatMessage(msg);
+
+    // Dispatch notifications to all other members of the pub
+    try {
+      const allPubsList = await getAllPubs();
+      const pub = allPubsList.find((p) => p.id === id);
+      if (pub && pub.members && pub.members.length > 0) {
+        const isBeacon = text.includes("BEACONS ARE LIT") || text.toLowerCase().includes("beacon");
+        const userLower = user.toLowerCase().trim();
+        const recipients = pub.members.filter((m) => m.toLowerCase().trim() !== userLower);
+
+        for (const recipient of recipients) {
+          if (isBeacon) {
+            let locationStr = `in <strong>${pub.name}</strong>`;
+            const match = text.match(/BEACONS ARE LIT AT ([^!]+)!/i) || text.match(/lit the beacons at ([^!]+) for/i);
+            if (match && match[1]) {
+              locationStr = `at <strong>${match[1].trim()}</strong> (${pub.name})`;
+            }
+            await createAndDispatchNotification({
+              idPrefix: "notif-beacon",
+              user: user,
+              targetUser: recipient,
+              text: `🚨 BEACON LIT ${locationStr}! Pints call for aid! 🍺⚔️`,
+              type: "beacon",
+            });
+          } else {
+            const snippet = text.length > 40 ? text.substring(0, 40) + "..." : text;
+            await createAndDispatchNotification({
+              idPrefix: "notif-pub-chat",
+              user: user,
+              targetUser: recipient,
+              text: `posted in <strong>${pub.name}</strong>: "${snippet}" 💬`,
+              type: "chat",
+            });
+          }
+        }
+      }
+    } catch (notifErr) {
+      console.error("Failed to generate pub message notifications:", notifErr);
+    }
+
     res.status(201).json(saved);
   } catch (err) {
     console.error(`Error saving pub chat message for ${req.params.id}:`, err);

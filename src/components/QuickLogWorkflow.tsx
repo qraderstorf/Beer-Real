@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Camera, Star, X, Check, Loader2, Award, Percent, MessageSquare, RefreshCw, Sparkles, Plus } from "lucide-react";
+import { Camera, Star, X, Check, Loader2, Award, Percent, MessageSquare, RefreshCw, Sparkles, Plus, History, RotateCcw } from "lucide-react";
 import { BeerLog, UserProfile } from "../types";
 import { PRELOADED_BEERS, PreloadedBeer, normalizeBeerName, searchBeers } from "../data/beerCatalog";
 import { compressAndResizeImage } from "../utils";
@@ -71,6 +71,37 @@ export default function QuickLogWorkflow({
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [logs]);
 
+  // Extract user's previously logged beers (most recent first)
+  const userPreviousBeers = React.useMemo(() => {
+    if (!currentUser) return [];
+    const map = new Map<string, PreloadedBeer>();
+
+    const userLogs = [...logs]
+      .filter((l) => l.user && l.user.toLowerCase() === currentUser.toLowerCase())
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    userLogs.forEach((log) => {
+      if (log.beerName) {
+        const trimmed = log.beerName.trim();
+        const lower = trimmed.toLowerCase();
+        if (
+          lower !== "unnamed pint" &&
+          lower !== "unnamed pint 🍺" &&
+          lower !== "unspecified" &&
+          !map.has(lower)
+        ) {
+          map.set(lower, {
+            name: trimmed,
+            style: log.beerStyle || "Lager",
+            abv: log.abv ? log.abv.toString() : "5.0",
+          });
+        }
+      }
+    });
+
+    return Array.from(map.values()).slice(0, 5);
+  }, [logs, currentUser]);
+
   // Handle Edit vs New Log flow initialization
   useEffect(() => {
     if (isOpen) {
@@ -137,6 +168,26 @@ export default function QuickLogWorkflow({
     }
   };
 
+  // Helper to ensure base64 image is uploaded to server/storage and converted to a short URL
+  const ensureShortImageUrl = async (imageStr?: string): Promise<string | undefined> => {
+    if (!imageStr) return undefined;
+    if (!imageStr.startsWith("data:image/")) return imageStr;
+    try {
+      const res = await fetch("/api/upload-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: imageStr }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.url) return data.url;
+      }
+    } catch (err) {
+      console.error("[QuickLogWorkflow] Image upload error:", err);
+    }
+    return imageStr;
+  };
+
   // Step 2: Instant Post!
   const handleInstantPost = async () => {
     if (!capturedPhoto) {
@@ -147,6 +198,9 @@ export default function QuickLogWorkflow({
     setIsSubmittingLog(true);
     setError(null);
 
+    // Upload base64 image first to obtain short URL
+    const shortImageUrl = await ensureShortImageUrl(capturedPhoto);
+
     // Instant Post payload: defaults are set to ensure valid backend schema but unskews stats!
     const payload = {
       user: currentUser || "Anonymous",
@@ -155,7 +209,7 @@ export default function QuickLogWorkflow({
       abv: 0,
       rating: 0,
       comment: "",
-      imageUrl: capturedPhoto,
+      imageUrl: shortImageUrl,
       hadCig: false,
       date: new Date().toISOString(),
       pubId: selectedPubId && selectedPubId !== "global" && selectedPubId !== "all" ? selectedPubId : undefined,
@@ -181,6 +235,15 @@ export default function QuickLogWorkflow({
       onLogAdded(createdLog); // Triggers realtime sync & feed updates immediately!
       setActiveLog(createdLog);
       
+      // Auto-suggest what they were drinking before if available
+      if (userPreviousBeers.length > 0 && !beerName) {
+        const lastBeer = userPreviousBeers[0];
+        setBeerName(lastBeer.name);
+        setBeerStyle(lastBeer.style);
+        setAbv(lastBeer.abv);
+        setIsAutofilled(true);
+      }
+
       // Post succeeded! Instantly transition to the Optional Enrichment page
       setStep("enrich");
     } catch (err: any) {
@@ -191,10 +254,8 @@ export default function QuickLogWorkflow({
     }
   };
 
-  // Step 3: Save Optional Enrichment Details
+  // Step 3: Save Optional Enrichment Details or Direct Manual Log
   const handleSaveEnrichment = async () => {
-    if (!activeLog) return;
-
     setIsSavingEnrichment(true);
     setError(null);
 
@@ -202,7 +263,46 @@ export default function QuickLogWorkflow({
     const cleanedName = normalized.name || beerName.trim() || "Unnamed Pint";
     const numericAbv = abv ? parseFloat(abv) : (normalized.abv || 0);
 
-    // Payload for updating details
+    if (!activeLog) {
+      // Direct Post without camera photo or instant post step
+      const shortImageUrl = await ensureShortImageUrl(capturedPhoto);
+      const payload = {
+        user: currentUser || "Anonymous",
+        beerName: cleanedName,
+        beerStyle: (beerStyle && beerStyle !== "Unspecified") ? beerStyle : (normalized.style || "Lager"),
+        abv: isNaN(numericAbv) ? 0 : numericAbv,
+        rating: rating,
+        comment: comment.trim(),
+        imageUrl: shortImageUrl || undefined,
+        hadCig: hadCig,
+        date: new Date().toISOString(),
+        pubId: selectedPubId && selectedPubId !== "global" && selectedPubId !== "all" ? selectedPubId : undefined,
+      };
+
+      try {
+        const response = await fetch("/api/beers", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to post pint log.");
+        }
+
+        const createdLog: BeerLog = await response.json();
+        onLogAdded(createdLog);
+        onClose();
+      } catch (err: any) {
+        console.error(err);
+        setError("Could not submit post. Please try again.");
+      } finally {
+        setIsSavingEnrichment(false);
+      }
+      return;
+    }
+
+    // Payload for updating details of an existing log
     const payload = {
       beerName: cleanedName,
       beerStyle: (beerStyle && beerStyle !== "Unspecified") ? beerStyle : (normalized.style || "Lager"),
@@ -281,7 +381,7 @@ export default function QuickLogWorkflow({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 pt-[calc(1rem+env(safe-area-inset-top,0px))] pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
         {/* Modal Window */}
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 15 }}
@@ -329,14 +429,14 @@ export default function QuickLogWorkflow({
 
             {/* Step 1: Capture State */}
             {step === "capture" && (
-              <div className="flex flex-col items-center justify-center p-8 space-y-4">
+              <div className="flex flex-col items-center justify-center p-6 space-y-4">
                 <div className="w-20 h-20 bg-amber-500/10 text-amber-500 rounded-full flex items-center justify-center animate-pulse">
                   <Camera className="w-10 h-10" />
                 </div>
                 <div className="text-center">
-                  <h3 className="font-bold text-slate-700 dark:text-slate-300">Opening Camera...</h3>
-                  <p className="text-xs text-slate-400 mt-1 max-w-[250px] mx-auto">
-                    Take a fresh photo of your pint to post immediately!
+                  <h3 className="font-bold text-slate-700 dark:text-slate-300">Log a Fresh Pint</h3>
+                  <p className="text-xs text-slate-400 mt-1 max-w-[260px] mx-auto">
+                    Take a photo of your pint or log details manually without a photo.
                   </p>
                 </div>
                 
@@ -346,12 +446,29 @@ export default function QuickLogWorkflow({
                     <span className="text-xs text-slate-400">Processing photo...</span>
                   </div>
                 ) : (
-                  <button
-                    onClick={triggerCamera}
-                    className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-2"
-                  >
-                    <RefreshCw className="w-4 h-4" /> Try Camera Again
-                  </button>
+                  <div className="flex flex-col w-full space-y-2 pt-2">
+                    <button
+                      onClick={triggerCamera}
+                      className="w-full px-5 py-3 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      <Camera className="w-4 h-4" /> Snap / Select Photo
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (userPreviousBeers.length > 0 && !beerName) {
+                          const lastBeer = userPreviousBeers[0];
+                          setBeerName(lastBeer.name);
+                          setBeerStyle(lastBeer.style);
+                          setAbv(lastBeer.abv);
+                          setIsAutofilled(true);
+                        }
+                        setStep("enrich");
+                      }}
+                      className="w-full px-5 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 border border-slate-200 dark:border-slate-700"
+                    >
+                      <Plus className="w-4 h-4" /> Log Manually (No Photo)
+                    </button>
+                  </div>
                 )}
 
                 {/* Hidden File Input */}
@@ -469,8 +586,39 @@ export default function QuickLogWorkflow({
                     </div>
                   )}
 
-                  {/* Quick-Select Chips */}
-                  <div className="mt-2 flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
+                  {/* Previously Drank / Your Recent Chips */}
+                  {userPreviousBeers.length > 0 && (
+                    <div className="mt-2.5 flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
+                      <span className="text-[10px] text-amber-600 dark:text-amber-400 font-extrabold shrink-0 flex items-center gap-1">
+                        <History className="w-3 h-3" /> Recent:
+                      </span>
+                      {userPreviousBeers.map((beer, idx) => (
+                        <button
+                          key={`prev-${beer.name}-${idx}`}
+                          type="button"
+                          onClick={() => selectSuggestion(beer)}
+                          className={`shrink-0 px-2.5 py-1 text-[11px] font-extrabold rounded-md border transition-all flex items-center gap-1 cursor-pointer shadow-2xs ${
+                            beerName.toLowerCase().trim() === beer.name.toLowerCase().trim()
+                              ? "bg-amber-500 text-white border-amber-600 ring-2 ring-amber-400/30"
+                              : "bg-amber-500/15 hover:bg-amber-500/25 text-amber-800 dark:text-amber-200 border-amber-500/30"
+                          }`}
+                          title={`Logged before: ${beer.name} (${beer.style}, ${beer.abv}%)`}
+                        >
+                          <span>🍺</span>
+                          <span>{beer.name}</span>
+                          <span className="text-[9px] opacity-80 font-bold">{beer.abv}%</span>
+                          {idx === 0 && (
+                            <span className="text-[8px] bg-amber-600/30 text-amber-900 dark:text-amber-100 px-1 rounded uppercase tracking-tighter ml-0.5">
+                              Last
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Popular Catalog Chips */}
+                  <div className="mt-1.5 flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
                     <span className="text-[10px] text-slate-400 font-bold shrink-0">Popular:</span>
                     {[
                       { name: "Guinness Draught", style: "Stout", abv: "4.2" },
@@ -485,7 +633,7 @@ export default function QuickLogWorkflow({
                         key={chip.name}
                         type="button"
                         onClick={() => selectSuggestion(chip)}
-                        className="shrink-0 px-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 text-[11px] font-bold rounded-md border border-amber-500/20 transition-all flex items-center gap-1 cursor-pointer"
+                        className="shrink-0 px-2 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[11px] font-bold rounded-md border border-slate-200 dark:border-slate-700 transition-all flex items-center gap-1 cursor-pointer"
                       >
                         <span>🍺</span>
                         <span>{chip.name.split(" ")[0]}</span>
@@ -496,7 +644,7 @@ export default function QuickLogWorkflow({
 
                   {isAutofilled && (
                     <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold mt-1.5 flex items-center gap-1 animate-pulse">
-                      ✨ Auto-filled style ({beerStyle}) & ABV ({abv}%) from catalog!
+                      ✨ Auto-suggested: {beerName} ({beerStyle}, {abv}% ABV)
                     </p>
                   )}
                 </div>

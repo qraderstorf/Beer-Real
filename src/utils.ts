@@ -8,10 +8,17 @@ export interface UserStatsResult {
   topBeer: string;
 }
 
+export function isImposterLog(log: BeerLog): boolean {
+  if (!log || !log.reactions) return false;
+  const dislikes = log.reactions["dislike"] || log.reactions["imposter"];
+  return Array.isArray(dislikes) && dislikes.length >= 3;
+}
+
 export function calculateUserStats(logs: BeerLog[], username?: string): UserStatsResult {
+  const validLogs = logs.filter((l) => !isImposterLog(l));
   const userLogs = username
-    ? logs.filter((l) => l.user.toLowerCase() === username.toLowerCase())
-    : logs;
+    ? validLogs.filter((l) => l.user.toLowerCase() === username.toLowerCase())
+    : validLogs;
 
   const totalPints = userLogs.length;
 
@@ -72,9 +79,9 @@ export function getMostDrankBeerForUser(username: string, logs: BeerLog[]): stri
 
 export function compressAndResizeImage(
   file: File,
-  maxWidth = 800,
-  maxHeight = 800,
-  quality = 0.6
+  maxWidth = 600,
+  maxHeight = 600,
+  quality = 0.5
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const objectUrl = URL.createObjectURL(file);

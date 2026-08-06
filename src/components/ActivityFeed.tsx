@@ -419,6 +419,7 @@ export default function ActivityFeed({
 
   const [newCommentTexts, setNewCommentTexts] = useState<Record<string, string>>({});
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
+  const [activeCommentPicker, setActiveCommentPicker] = useState<string | null>(null);
 
   const toggleComments = (logId: string) => {
     setExpandedComments((prev) => {
@@ -501,6 +502,69 @@ export default function ActivityFeed({
     }
   };
 
+  const handleToggleCommentReaction = async (logId: string, commentId: string, reaction: string) => {
+    const targetLog = logs.find((l) => l.id === logId);
+    if (!targetLog) return;
+
+    const targetComment = (targetLog.comments || []).find((c) => c.id === commentId);
+    if (!targetComment) return;
+
+    // Optimistically update comment reaction
+    const currentReactions = targetComment.reactions ? { ...targetComment.reactions } : {};
+    const currentUsers = currentReactions[reaction] ? [...currentReactions[reaction]] : [];
+    const userIdx = currentUsers.indexOf(currentUser);
+
+    if (userIdx !== -1) {
+      currentUsers.splice(userIdx, 1);
+    } else {
+      currentUsers.push(currentUser);
+    }
+
+    if (currentUsers.length === 0) {
+      delete currentReactions[reaction];
+    } else {
+      currentReactions[reaction] = currentUsers;
+    }
+
+    const updatedComments = (targetLog.comments || []).map((c) => {
+      if (c.id === commentId) {
+        return { ...c, reactions: currentReactions };
+      }
+      return c;
+    });
+
+    const updatedLog = { ...targetLog, comments: updatedComments };
+    onLogUpdated(updatedLog);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+    try {
+      const response = await fetch(
+        `/api/beers/${encodeURIComponent(logId)}/comments/${encodeURIComponent(commentId)}/reactions`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user: currentUser, reaction }),
+          signal: controller.signal,
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Could not update comment reaction");
+      }
+
+      const serverLog: BeerLog = await response.json();
+      onLogUpdated(serverLog);
+    } catch (err) {
+      console.error("Error toggling comment reaction:", err);
+      // Revert on error
+      onLogUpdated(targetLog);
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  };
+
   const getUserAvatar = (username: string) => {
     const user = users.find((u) => u.username.toLowerCase() === username.toLowerCase());
     return user?.avatar || "👤";
@@ -568,52 +632,11 @@ export default function ActivityFeed({
     return `${baseDate} at ${timeStr}`;
   };
 
-  // Helper to get a funny commentary for midnight pints
-  const getMidnightCommentary = (isoString: string) => {
-    const d = new Date(isoString);
-    if (isNaN(d.getTime())) return null;
-    const hours = d.getHours();
-    
-    switch (hours) {
-      case 0: // 12:00 AM - 12:59 AM
-        return {
-          title: "🎃 Pumpkin O'clock!",
-          text: "Clock has struck midnight and you make a really good looking pumpkin!",
-          color: "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900/40 dark:bg-orange-950/20 dark:text-orange-400"
-        };
-      case 1: // 1:00 AM - 1:59 AM
-        return {
-          title: "🦉 1 AM Night Owl!",
-          text: "Nothing good happens after 2 AM... so drink this fast!",
-          color: "border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-900/40 dark:bg-indigo-950/20 dark:text-indigo-400"
-        };
-      case 2: // 2:00 AM - 2:59 AM
-        return {
-          title: "🚨 2 AM Gremlin Hour!",
-          text: "Last call was 20 minutes ago. Where did you get this pint? 🕵️",
-          color: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-400"
-        };
-      case 3: // 3:00 AM - 3:59 AM
-        return {
-          title: "🧟 3 AM Zombie Pint!",
-          text: "Half alive or half dead, one thing is for sure: the glass is empty!",
-          color: "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-400"
-        };
-      case 4: // 4:00 AM - 4:59 AM
-        return {
-          title: "🧛 4 AM Vampire Mode!",
-          text: "Is this a really late night or a very early breakfast? We won't judge. 🍳",
-          color: "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700 dark:border-fuchsia-900/40 dark:bg-fuchsia-950/20 dark:text-fuchsia-400"
-        };
-      default:
-        return null;
-    }
-  };
-
   const activeSearchTerm = (propSearchTerm || localSearchTerm).trim();
 
   // Filtering logs (database-scoped queries handle user/pub/style/search filters)
   const filteredLogs = logs.filter((log) => {
+
     if (!activeSearchTerm) return true;
     const term = activeSearchTerm.toLowerCase();
     return (
@@ -638,22 +661,22 @@ export default function ActivityFeed({
       <style>{`
         @keyframes drunkSway {
           0%, 100% { transform: translate(0px, 0px) rotate(0deg); filter: blur(0px); }
-          10% { transform: translate(-0.8px, 0.55px) rotate(-0.15deg); filter: blur(0.375px); }
-          20% { transform: translate(0.625px, -0.8px) rotate(0.1deg); filter: blur(0.15px); }
-          30% { transform: translate(-0.5px, -0.5px) rotate(-0.2deg); filter: blur(0.875px); }
-          40% { transform: translate(0.8px, 0.625px) rotate(0.15deg); filter: blur(0.3px); }
-          50% { transform: translate(-0.375px, -1px) rotate(-0.075deg); filter: blur(1.25px); }
-          60% { transform: translate(0.625px, 0.5px) rotate(0.2deg); filter: blur(0.7px); }
-          70% { transform: translate(-0.75px, -0.25px) rotate(-0.15deg); filter: blur(0.25px); }
-          80% { transform: translate(0.875px, -0.625px) rotate(0.25deg); filter: blur(1.05px); }
-          90% { transform: translate(-0.375px, 0.875px) rotate(-0.125deg); filter: blur(0.375px); }
+          10% { transform: translate(-0.25px, 0.15px) rotate(-0.04deg); filter: blur(0.1px); }
+          20% { transform: translate(0.2px, -0.2px) rotate(0.03deg); filter: blur(0.05px); }
+          30% { transform: translate(-0.15px, -0.15px) rotate(-0.05deg); filter: blur(0.25px); }
+          40% { transform: translate(0.25px, 0.15px) rotate(0.04deg); filter: blur(0.1px); }
+          50% { transform: translate(-0.1px, -0.3px) rotate(-0.02deg); filter: blur(0.35px); }
+          60% { transform: translate(0.2px, 0.15px) rotate(0.05deg); filter: blur(0.2px); }
+          70% { transform: translate(-0.2px, -0.08px) rotate(-0.04deg); filter: blur(0.08px); }
+          80% { transform: translate(0.25px, -0.2px) rotate(0.06deg); filter: blur(0.3px); }
+          90% { transform: translate(-0.15px, 0.25px) rotate(-0.03deg); filter: blur(0.1px); }
         }
         @keyframes photoBlurSway {
           0%, 100% { transform: scale(1) translate(0px, 0px) rotate(0deg); filter: blur(0px); }
-          20% { transform: scale(1.007) translate(-0.875px, 0.625px) rotate(-0.1deg); filter: blur(0.875px); }
-          40% { transform: scale(0.995) translate(0.75px, -0.75px) rotate(0.075deg); filter: blur(1.75px); }
-          60% { transform: scale(1.005) translate(-0.5px, -0.375px) rotate(-0.05deg); filter: blur(0.5px); }
-          80% { transform: scale(1.0025) translate(0.875px, -0.5px) rotate(0.125deg); filter: blur(1.5px); }
+          20% { transform: scale(1.0015) translate(-0.2px, 0.15px) rotate(-0.02deg); filter: blur(0.2px); }
+          40% { transform: scale(0.999) translate(0.18px, -0.18px) rotate(0.02deg); filter: blur(0.4px); }
+          60% { transform: scale(1.001) translate(-0.12px, -0.1px) rotate(-0.01deg); filter: blur(0.15px); }
+          80% { transform: scale(1.0005) translate(0.2px, -0.12px) rotate(0.03deg); filter: blur(0.35px); }
         }
         @keyframes benderSirenAlert {
           0%, 100% {
@@ -697,23 +720,25 @@ export default function ActivityFeed({
         }
       `}</style>
       
-      {/* Quick Log Pint CTA Banner - Ultra Compact & Responsive */}
-      <div className="bg-gradient-to-r from-amber-500 via-amber-600 to-orange-500 rounded-xl p-2.5 sm:p-3.5 shadow-md border border-amber-600/10 flex flex-row items-center justify-between gap-2.5">
-        <div className="space-y-0.5 min-w-0">
-          <h3 className="text-white font-extrabold text-xs sm:text-sm uppercase tracking-wider flex items-center gap-1.5 truncate">
-            Time for a Pint? 🍻
-          </h3>
-          <p className="text-white/90 text-[11px] font-semibold leading-normal hidden sm:block">
-            Creamy pint, meet camera. Friends, meet regret.
-          </p>
+      {/* Quick Log Pint CTA Banner - Sticky on scroll */}
+      <div className="sticky top-[calc(3.5rem+env(safe-area-inset-top,0px))] sm:top-[calc(4rem+env(safe-area-inset-top,0px))] z-30 -mt-6 pt-2 pb-2 bg-slate-50 dark:bg-slate-950 transition-all">
+        <div className="bg-gradient-to-r from-amber-500 via-amber-600 to-orange-500 rounded-xl p-2.5 sm:p-3.5 shadow-md border border-amber-600/10 flex flex-row items-center justify-between gap-2.5">
+          <div className="space-y-0.5 min-w-0">
+            <h3 className="text-white font-extrabold text-xs sm:text-sm uppercase tracking-wider flex items-center gap-1.5 truncate">
+              Time for a Pint? 🍻
+            </h3>
+            <p className="text-white/90 text-[11px] font-semibold leading-normal hidden sm:block">
+              Creamy pint, meet camera. Friends, meet regret.
+            </p>
+          </div>
+          
+          <button
+            onClick={onQuickLogRequested}
+            className="bg-white hover:bg-slate-50 text-amber-600 font-extrabold px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-[11px] sm:text-xs shadow-sm active:scale-95 transition-all flex items-center justify-center gap-1.5 select-none cursor-pointer uppercase shrink-0 tracking-wider font-sans whitespace-nowrap"
+          >
+            <Camera className="w-3.5 h-3.5 text-amber-500" /> Log a Pint
+          </button>
         </div>
-        
-        <button
-          onClick={onQuickLogRequested}
-          className="bg-white hover:bg-slate-50 text-amber-600 font-extrabold px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-[11px] sm:text-xs shadow-sm active:scale-95 transition-all flex items-center justify-center gap-1.5 select-none cursor-pointer uppercase shrink-0 tracking-wider font-sans whitespace-nowrap"
-        >
-          <Camera className="w-3.5 h-3.5 text-amber-500" /> Log a Pint
-        </button>
       </div>
 
       {/* Compact Search & Filter Bar */}
@@ -835,8 +860,8 @@ export default function ActivityFeed({
                   className={`bg-white dark:bg-slate-900 rounded-xl border overflow-hidden transition-all shadow-sm relative ${
                     isDenied
                       ? "border-red-600 dark:border-red-800 shadow-[inset_0_0_20px_rgba(220,38,38,0.08)] bg-red-50/5"
-                      : isOnBender 
-                        ? "ring-2 ring-red-500/10 animate-bender-combined" 
+                      : isOnBender
+                        ? "border-amber-400/80 dark:border-amber-500/50 shadow-sm ring-1 ring-amber-500/20 animate-drunk-sway"
                         : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
                   }`}
                 >
@@ -848,42 +873,6 @@ export default function ActivityFeed({
                         <span className="text-[9px] sm:text-[11px] font-black uppercase text-red-500 tracking-[0.15em]">NOT A REAL PINT! 🕵️</span>
                       </div>
                     </div>
-                  )}
-
-                  {isOnBender && !isDenied && (
-                    <>
-                      {/* Warning stripes pattern overlay banner */}
-                      <div className="relative bg-amber-500 dark:bg-amber-600 text-black text-[11px] font-black tracking-wider py-2.5 px-4 shadow-md flex items-center justify-between overflow-hidden z-10 border-b-2 border-red-600">
-                        {/* Warning stripes pattern on the left and right sides */}
-                        <div className="absolute inset-y-0 left-0 w-8 bg-[repeating-linear-gradient(-45deg,#000,#000_6px,#f59e0b_6px,#f59e0b_12px)] opacity-80 pointer-events-none" />
-                        <div className="absolute inset-y-0 right-0 w-8 bg-[repeating-linear-gradient(-45deg,#000,#000_6px,#f59e0b_6px,#f59e0b_12px)] opacity-80 pointer-events-none" />
-                        
-                        <div className="flex items-center gap-2 pl-6 relative z-10 text-red-950 font-black">
-                          <span className="animate-bounce text-sm inline-block">⚠️</span>
-                          <span className="uppercase tracking-widest font-black text-xs">BENDER ALARM SYSTEM</span>
-                          <span className="w-2 h-2 rounded-full bg-red-600 animate-ping inline-block" />
-                        </div>
-                        <div className="pr-6 relative z-10 flex items-center gap-1.5">
-                          <span className="text-[10px] bg-red-700 text-white font-black px-2 py-0.5 rounded shadow-sm uppercase border border-red-800 tracking-wider">
-                            {(() => {
-                              const funnySlogans = [
-                                "LIVER STATUS: UNKNOWN",
-                                "RIP TOMORROW MORNING",
-                                "WOBBLE INDEX IS MAXIMUM",
-                                "NO PINT IS SAFE",
-                                "DRY JULY EXPIRED",
-                                "CREAMY CHAOS INITIATED",
-                                "HYDRATION STATUS: COWARDLY"
-                              ];
-                              const index = log.id.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0) % funnySlogans.length;
-                              return funnySlogans[index];
-                            })()}
-                          </span>
-                        </div>
-                      </div>
-                      {/* Pulsing red/orange police light atmosphere background */}
-                      <div className="absolute inset-0 pointer-events-none opacity-[0.04] dark:opacity-[0.08] animate-siren-ambient z-0" />
-                    </>
                   )}
 
                   {/* Log Header */}
@@ -903,29 +892,16 @@ export default function ActivityFeed({
                           >
                             {log.user}
                           </span>
-                          {isOnBender && (
-                            (() => {
-                              const benderTitles = [
-                                "BENDER DETECTED",
-                                "MAXIMUM BEND ACTIVE",
-                                "LIQUID LEGEND ENGAGED",
-                                "HERO STATE ACTIVE",
-                                "BEER PATROL SIREN",
-                                "COMMUNITY LEGEND"
-                              ];
-                              const benderTitle = benderTitles[log.user.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0) % benderTitles.length];
-                              return (
-                                <span 
-                                  className="bg-gradient-to-r from-red-600 via-amber-500 via-orange-500 to-red-600 text-white font-black px-2 py-0.5 rounded-full text-[9px] uppercase tracking-widest animate-bounce flex items-center gap-1 shadow-lg border-2 border-amber-400"
-                                  title={`${log.user} is on a 4+ pints bender!`}
-                                >
-                                  🚨 <Siren className="w-3.5 h-3.5 animate-pulse text-white fill-current animate-spin" style={{ animationDuration: '3s' }} /> {benderTitle}! 🚨
-                                </span>
-                              );
-                            })()
-                          )}
                           {log.rating === 5 && (
                             <Award className="w-3.5 h-3.5 text-amber-500 fill-amber-500" title="Elite rating!" />
+                          )}
+                          {isOnBender && !isDenied && (
+                            <span 
+                              className="bg-amber-500/10 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 font-extrabold px-2 py-0.5 rounded-full text-[9px] uppercase tracking-wider inline-flex items-center gap-1 border border-amber-300 dark:border-amber-700/60 shadow-xs"
+                              title={`${log.user} is on a bender (4+ pints logged today)!`}
+                            >
+                              🚨 Bender Alert
+                            </span>
                           )}
                         </div>
                         <div className="flex items-center gap-1.5 flex-wrap">
@@ -971,12 +947,12 @@ export default function ActivityFeed({
                          log.beerName.trim().toLowerCase() !== "unnamed pint" && 
                          log.beerName.trim().toLowerCase() !== "unnamed pint 🍺" ? (
                           <>
-                            <h3 className="font-extrabold text-slate-800 text-md leading-tight">
+                            <h3 className="font-extrabold text-slate-900 dark:text-slate-100 text-base md:text-lg leading-tight">
                               {log.beerName}
                             </h3>
                             <div className="flex flex-wrap items-center gap-2 mt-1.5">
                               {log.abv > 0 && (
-                                <span className="bg-slate-50 text-slate-500 border border-slate-200 px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase">
+                                <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase">
                                   {log.abv.toFixed(1)}% ABV
                                 </span>
                               )}
@@ -990,7 +966,7 @@ export default function ActivityFeed({
                         ) : (
                           <div className="flex flex-wrap items-center gap-2">
                             {log.abv > 0 && (
-                              <span className="bg-slate-50 text-slate-500 border border-slate-200 px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase">
+                              <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase">
                                 {log.abv.toFixed(1)}% ABV
                               </span>
                             )}
@@ -1005,7 +981,7 @@ export default function ActivityFeed({
 
                       {/* Display Stars */}
                       {log.rating > 0 ? (
-                        <div className="flex items-center gap-0.5 bg-slate-50 border border-slate-200 rounded-lg px-2 py-0.5">
+                        <div className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-0.5">
                           {[1, 2, 3, 4, 5].map((star) => (
                             <Star
                               key={star}
@@ -1020,21 +996,6 @@ export default function ActivityFeed({
                       ) : null}
                     </div>
 
-                    {/* Midnight Hour Commentary */}
-                    {(() => {
-                      const comment = getMidnightCommentary(log.date);
-                      if (!comment) return null;
-                      return (
-                        <div className={`flex items-start gap-2.5 p-3 rounded-xl border border-l-4 transition-all duration-150 shadow-sm ${comment.color}`}>
-                          <span className="text-sm shrink-0 animate-bounce">🌙</span>
-                          <div>
-                            <span className="font-extrabold block text-xs tracking-wide">{comment.title}</span>
-                            <span className="text-[11px] font-medium leading-relaxed opacity-90">{comment.text}</span>
-                          </div>
-                        </div>
-                      );
-                    })()}
-
                     {/* Logged Photo */}
                     {log.imageUrl && (
                       <div className="relative rounded-xl overflow-hidden border border-slate-200/85 bg-slate-50 max-h-80 w-full flex items-center justify-center shadow-sm">
@@ -1046,18 +1007,6 @@ export default function ActivityFeed({
                           }`}
                           referrerPolicy="no-referrer"
                         />
-                      </div>
-                    )}
-
-                    {/* Comment Block */}
-                    {log.comment && (
-                      <div className="bg-amber-50 rounded-xl p-3.5 border-l-4 border-amber-500 border border-amber-100 shadow-sm relative mt-3">
-                        <span className="text-[10px] text-amber-800 font-extrabold uppercase tracking-wider block mb-1">
-                          📝 Current Vibe:
-                        </span>
-                        <p className="text-sm md:text-[14px] text-slate-900 dark:text-slate-100 font-medium leading-relaxed">
-                          {renderTextWithMentions(log.comment, users, onViewProfileRequested)}
-                        </p>
                       </div>
                     )}
 
@@ -1276,6 +1225,20 @@ export default function ActivityFeed({
                         </div>
                       );
                     })()}
+
+                    {/* Caption Block */}
+                    {log.comment && (
+                      <div className="bg-amber-500/10 dark:bg-amber-950/60 rounded-xl p-3 border-l-4 border-amber-500 border border-amber-500/20 dark:border-amber-700/50 shadow-2xs relative mt-3 transition-all">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                            📝 Current Vibe
+                          </span>
+                        </div>
+                        <p className="font-semibold text-slate-800 dark:text-slate-200 text-xs sm:text-sm leading-snug">
+                          {renderTextWithMentions(log.comment, users, onViewProfileRequested)}
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   {/* Interaction Footer */}
@@ -1330,19 +1293,55 @@ export default function ActivityFeed({
                                     <UserAvatar username={cmt.user} users={users} className="w-6 h-6 text-[10px] rounded-lg" />
                                   </div>
                                   <div className="flex-1 comment-bubble min-w-0">
-                                    <div className="flex items-center justify-between">
-                                      <span 
-                                        className="comment-username hover:underline cursor-pointer"
-                                        onClick={() => onViewProfileRequested?.(cmt.user)}
-                                      >
-                                        {cmt.user}
-                                      </span>
-                                      <div className="flex items-center gap-1">
-                                        <span className="text-[9px] text-slate-400 dark:text-slate-500 font-semibold">{formatBeerDate(cmt.date)}</span>
+                                    <div className="flex items-center justify-between gap-1.5">
+                                      <div className="flex items-center gap-1.5 min-w-0">
+                                        <span 
+                                          className="comment-username hover:underline cursor-pointer truncate"
+                                          onClick={() => onViewProfileRequested?.(cmt.user)}
+                                        >
+                                          {cmt.user}
+                                        </span>
+                                        <span className="text-[9px] text-slate-400 dark:text-slate-500 font-semibold shrink-0">
+                                          {formatBeerDate(cmt.date)}
+                                        </span>
+                                      </div>
+
+                                      <div className="flex items-center gap-1 shrink-0">
+                                        {/* Thumbs up & Thumbs down in top right */}
+                                        {[
+                                          { emoji: "👍", label: "Like" },
+                                          { emoji: "👎", label: "Dislike" },
+                                        ].map(({ emoji, label }) => {
+                                          const userList = cmt.reactions?.[emoji] || [];
+                                          const hasReacted = userList.includes(currentUser);
+                                          return (
+                                            <button
+                                              key={emoji}
+                                              type="button"
+                                              onClick={() => handleToggleCommentReaction(log.id, cmt.id, emoji)}
+                                              title={
+                                                userList.length > 0
+                                                  ? `${label}: ${userList.join(", ")}`
+                                                  : `React with ${label}`
+                                              }
+                                              className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium transition-all flex items-center gap-0.5 border select-none ${
+                                                hasReacted
+                                                  ? "bg-amber-100 dark:bg-amber-900/50 border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-100 font-bold shadow-2xs"
+                                                  : "bg-slate-50 dark:bg-slate-800/60 border-slate-200/60 dark:border-slate-700/60 text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700/80 hover:text-slate-600 dark:hover:text-slate-300"
+                                              }`}
+                                            >
+                                              <span className="leading-none text-[11px]">{emoji}</span>
+                                              {userList.length > 0 && (
+                                                <span className="text-[9px] font-extrabold">{userList.length}</span>
+                                              )}
+                                            </button>
+                                          );
+                                        })}
+
                                         {(isSeymoreBeers(currentUser) || cmt.user.toLowerCase() === currentUser.toLowerCase()) && (
                                           <button
                                             onClick={() => handleDeleteComment(log.id, cmt.id)}
-                                            className="text-slate-400 hover:text-red-500 p-0.5 rounded transition-all focus:outline-none"
+                                            className="text-slate-400 hover:text-red-500 p-0.5 rounded transition-all focus:outline-none ml-0.5"
                                             title="Delete comment"
                                           >
                                             <Trash2 className="w-3 h-3" />
@@ -1350,7 +1349,7 @@ export default function ActivityFeed({
                                         )}
                                       </div>
                                     </div>
-                                    <p className="comment-body break-words">
+                                    <p className="comment-body break-words mt-0.5">
                                       {renderTextWithMentions(cmt.text, users, onViewProfileRequested)}
                                     </p>
                                   </div>

@@ -10,6 +10,7 @@ import LoginScreen from "./components/LoginScreen";
 import PubHub from "./components/PubHub";
 import QuickLogWorkflow from "./components/QuickLogWorkflow";
 import UserAvatar from "./components/UserAvatar";
+import Logo from "./components/Logo";
 import { db, useFirestore } from "./firebase";
 import { collection, query, orderBy, limit, onSnapshot, getDocs, startAfter, where, QueryConstraint, disableNetwork } from "firebase/firestore";
 
@@ -93,12 +94,12 @@ export default function App() {
     return localStorage.getItem("beer_logger_username") || "";
   });
 
-  // Ensure selectedPubId matches one of the user's joined pubs or is global
+  // Ensure selectedPubId matches an existing pub or fallback to global
   useEffect(() => {
     if (!currentUser || pubs.length === 0) return;
     if (selectedPubId === "global" || selectedPubId === "all" || selectedPubId === "") return;
-    const myPubs = pubs.filter(p => p.members.includes(currentUser));
-    if (!myPubs.some(p => p.id === selectedPubId)) {
+    const pubExists = pubs.some(p => p.id === selectedPubId);
+    if (!pubExists) {
       setSelectedPubId("global");
     }
   }, [pubs, currentUser, selectedPubId]);
@@ -213,6 +214,7 @@ export default function App() {
       console.log("[PWA] Service worker is ready for FCM token registration:", registration.scope);
 
       let token: string | null = null;
+      const vapidKey = "BEAvudUCXRjL5PR4F9QcF5SPddJXhzNE7ZN2SWV7LF-yZSCUmDCPEnkxSVnPoXuomyyW1aEb-w842p_y1q2oBS8";
 
       // 2. Generate FCM SDK token using our active unified service worker registration
       try {
@@ -221,6 +223,7 @@ export default function App() {
         if (app) {
           const messaging = getMessaging(app);
           token = await getToken(messaging, {
+            vapidKey,
             serviceWorkerRegistration: registration
           });
           if (token) {
@@ -234,12 +237,25 @@ export default function App() {
       // Check standard Web Push subscription fallback if FCM SDK returned null
       if (!token) {
         try {
-          const sub = await registration.pushManager.getSubscription();
+          let sub = await registration.pushManager.getSubscription();
+          if (!sub) {
+            const padding = "=".repeat((4 - (vapidKey.length % 4)) % 4);
+            const base64 = (vapidKey + padding).replace(/-/g, "+").replace(/_/g, "/");
+            const rawData = window.atob(base64);
+            const applicationServerKey = new Uint8Array(rawData.length);
+            for (let i = 0; i < rawData.length; ++i) {
+              applicationServerKey[i] = rawData.charCodeAt(i);
+            }
+            sub = await registration.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey
+            });
+          }
           if (sub && sub.endpoint) {
             token = sub.endpoint;
           }
         } catch (e) {
-          console.warn("[FCM] Push manager subscription lookup failed:", e);
+          console.warn("[FCM] Push manager subscription lookup/creation failed:", e);
         }
       }
 
@@ -261,35 +277,19 @@ export default function App() {
   const sendTestPushNotification = async () => {
     if (!currentUser) return;
     
-    // Always trigger an in-app visual toast banner so user knows test notification was sent
+    // Trigger an in-app visual toast banner so user knows test notification was sent
     setActiveToast({
+      id: `test-toast-${Date.now()}`,
       text: "Test Notification Triggered! Check your lock screen / notification banner 🍻"
     });
 
     try {
-      // Step A: Ensure Service Worker is active & Token is registered
-      await registerPushToken();
-
-      // Step B: Trigger server FCM dispatch
+      // Trigger server FCM dispatch (the server sends the background FCM push)
       await fetch("/api/send-test-push", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user: currentUser })
       });
-
-      // Step C: Display active system notification via service worker registration
-      if ("serviceWorker" in navigator && typeof Notification !== "undefined" && Notification.permission === "granted") {
-        const reg = await navigator.serviceWorker.ready;
-        if (reg && reg.showNotification) {
-          await reg.showNotification("BeerReal System 🍻", {
-            body: "A cold beer is calling your name! Everything's working through background FCM push.",
-            icon: "/icon.svg",
-            badge: "/icon.svg",
-            tag: "beerreal-test-notification",
-            data: { url: "/" }
-          });
-        }
-      }
     } catch (err) {
       console.warn("Failed to trigger test push:", err);
     }
@@ -320,6 +320,7 @@ export default function App() {
 
     if (permission === "granted") {
       // 2. Register FCM token and send test push notification
+      await registerPushToken();
       await sendTestPushNotification();
     }
   };
@@ -397,24 +398,6 @@ export default function App() {
       setTimeout(() => {
         setActiveToast((curr) => (curr?.id === notif.id ? null : curr));
       }, 7000);
-
-      // ALSO trigger System Phone/OS Notification via ServiceWorker if permission granted
-      if ("serviceWorker" in navigator && typeof Notification !== "undefined" && Notification.permission === "granted") {
-        navigator.serviceWorker.ready.then((reg) => {
-          try {
-            reg.showNotification("BeerReal Alert! 🍻", {
-              body: formattedText,
-              icon: "/icon.svg",
-              badge: "/icon.svg",
-              tag: notif.id,
-              renotify: true,
-              data: { url: "/" }
-            } as any);
-          } catch (e) {
-            console.warn("Failed to display system notification:", e);
-          }
-        });
-      }
     }
   }, [notifications, currentUser, logs]);
 
@@ -429,9 +412,15 @@ export default function App() {
           const messaging = getMessaging(app);
           unsub = onMessage(messaging, (payload) => {
             console.log("[FCM Client] Foreground message received:", payload);
-            const title = payload.notification?.title || payload.data?.title || "BeerReal Alert! 🍻";
             const body = payload.notification?.body || payload.data?.body || "A cold beer was logged!";
-            const notifId = payload.data?.notificationId || "fcm-fg-" + Date.now();
+            const rawNotifId = payload.data?.notificationId || payload.data?.id || (payload.notification as any)?.tag;
+            const notifId = rawNotifId || ("fcm-fg-" + Date.now());
+
+            // Add notification ID to seen set so fetch notifications state effect does not duplicate toast
+            if (rawNotifId) {
+              seenNotifIdsRef.current.add(rawNotifId);
+            }
+            seenNotifIdsRef.current.add(notifId);
 
             // Display in-app toast when foreground message arrives
             setActiveToast({ id: notifId, text: body });
@@ -586,21 +575,8 @@ export default function App() {
 
   const handleListenerErrorGlobal = (err: any, source: string) => {
     const errMsg = err?.message || err?.toString() || "";
-    const errCode = err?.code || "";
-    const isQuotaOrAccess = 
-      errMsg.toLowerCase().includes("quota") ||
-      errMsg.toLowerCase().includes("exhausted") ||
-      errCode === "resource-exhausted" ||
-      errCode === "permission-denied";
-
-    if (isQuotaOrAccess) {
-      console.warn(`[Firestore] Connection quota or permission limit on ${source} listener. Switched to local server files fallback:`, errMsg);
-      setRealtimeError(null);
-      setClientUseFirestore(false);
-      fetchData(false, true);
-    } else {
-      console.warn(`[Firestore] Transient notification on ${source}:`, errMsg);
-    }
+    console.error(`[Firestore Error on ${source}]:`, err);
+    setRealtimeError(errMsg || "Firestore connection error");
   };
 
   // 1. Conditional Beers Listener & Info Fetch: suspended when page is hidden or user is idle to save read costs!
@@ -1406,7 +1382,7 @@ export default function App() {
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans antialiased text-slate-900">
       {/* Toast Notification Banner */}
       {activeToast && (
-        <div className="fixed top-4 right-4 z-[9999] max-w-sm bg-slate-900 text-white p-4 rounded-2xl shadow-2xl border border-amber-500/40 flex items-start gap-3">
+        <div className="fixed top-[calc(1rem+env(safe-area-inset-top,0px))] right-4 left-4 sm:left-auto z-[9999] max-w-sm bg-slate-900 text-white p-4 rounded-2xl shadow-2xl border border-amber-500/40 flex items-start gap-3">
           <div className="p-2 bg-amber-500 text-white rounded-xl text-lg font-black shrink-0">🍻</div>
           <div className="flex-1">
             <div className="flex items-center justify-between gap-2">
@@ -1419,41 +1395,10 @@ export default function App() {
       )}
 
       {/* Navigation Top Bar */}
-      <header className="sticky top-0 bg-white border-b border-slate-200 z-40 flex-shrink-0">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          {/* Logo with a comical creamy draft pint mug logo */}
-          <div className="flex items-center gap-2 cursor-pointer" onClick={() => setActiveTab("feed")}>
-            <div className="relative w-8 h-9 flex items-end justify-center pb-0.5">
-              {/* Foam Head */}
-              <div className="absolute top-1 w-5.5 h-2.5 bg-white rounded-full z-20 shadow-md border border-slate-200/50"></div>
-              {/* Pint Glass Body - tapered */}
-              <div 
-                className="w-5 h-6.5 bg-amber-500 relative border-l border-r border-b border-amber-600/60 overflow-hidden" 
-                style={{
-                  clipPath: "polygon(0% 0%, 100% 0%, 80% 100%, 20% 100%)",
-                  borderRadius: "0 0 3px 3px"
-                }}
-              >
-                {/* Beer liquid top highlight */}
-                <div className="absolute top-0 left-0 right-0 h-1 bg-amber-100 opacity-90"></div>
-                {/* Condensation glow inside */}
-                <div className="absolute top-0.5 left-0.5 right-0.5 bottom-0 bg-gradient-to-b from-amber-400 to-amber-600 opacity-90"></div>
-                {/* Bubbles */}
-                <div className="absolute bottom-0.5 left-1 w-0.5 h-0.5 bg-white/70 rounded-full animate-pulse"></div>
-                <div className="absolute bottom-1.5 right-1 w-0.5 h-0.5 bg-white/60 rounded-full animate-pulse"></div>
-              </div>
-              {/* Glass Rim highlight/outer shine */}
-              <div 
-                className="absolute top-1 w-5.5 h-6.5 pointer-events-none border-l border-r border-b border-white/40 rounded-b-[3px]"
-                style={{
-                  clipPath: "polygon(0% 0%, 100% 0%, 80% 100%, 20% 100%)",
-                }}
-              ></div>
-            </div>
-            <span className="text-xl font-bold tracking-tight text-slate-850">
-              Beer <span className="text-amber-500">real</span>
-            </span>
-          </div>
+      <header className="sticky top-0 bg-white border-b border-slate-200 z-40 flex-shrink-0 pt-safe">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-2">
+          {/* Logo with new stylized Camera-Pint Vector Mark */}
+          <Logo size="md" onClick={() => setActiveTab("feed")} />
 
           {/* Navigation Tabs (Professional Polish Pill-tabs) */}
           <nav className="hidden sm:flex items-center bg-slate-100 p-1 rounded-md">
@@ -1493,22 +1438,32 @@ export default function App() {
           </nav>
 
           {/* Identity & Refresh Actions (Professional Polish style) */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5 sm:gap-3">
+            {/* Refresh Button */}
+            <button
+              onClick={() => fetchData(true)}
+              disabled={refreshing}
+              className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-all focus:outline-none shrink-0"
+              title="Refresh logs"
+            >
+              <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin text-amber-500" : ""}`} />
+            </button>
+
             {/* Notifications Bell */}
             <div className="relative" ref={notificationsRef}>
               <button
                 onClick={handleOpenNotifications}
-                className={`flex items-center gap-2 py-1.5 px-3 rounded-xl border transition-all focus:outline-none cursor-pointer ${
+                className={`flex items-center gap-1.5 py-1 px-2.5 sm:py-1.5 sm:px-3 rounded-xl border transition-all focus:outline-none cursor-pointer shrink-0 ${
                   unreadCount > 0
                     ? "bg-amber-500 text-white border-amber-500 shadow-lg shadow-amber-200/50 dark:shadow-none animate-pulse font-black"
                     : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 hover:text-amber-500 hover:bg-slate-100 hover:border-slate-300 dark:hover:bg-slate-700"
                 }`}
                 title="Notifications"
               >
-                <Bell className={`w-4.5 h-4.5 ${unreadCount > 0 ? "text-white" : "text-slate-400 hover:text-amber-500"}`} />
+                <Bell className={`w-4 h-4 sm:w-4.5 sm:h-4.5 ${unreadCount > 0 ? "text-white" : "text-slate-400 hover:text-amber-500"}`} />
                 <span className="text-xs font-bold hidden sm:inline">Alerts</span>
                 {unreadCount > 0 && (
-                  <span className="bg-white text-amber-600 dark:bg-slate-900 dark:text-amber-400 w-4.5 h-4.5 text-[9px] font-black rounded-full flex items-center justify-center shadow-sm shrink-0">
+                  <span className="bg-white text-amber-600 dark:bg-slate-900 dark:text-amber-400 w-4 h-4 sm:w-4.5 sm:h-4.5 text-[9px] font-black rounded-full flex items-center justify-center shadow-sm shrink-0">
                     {unreadCount}
                   </span>
                 )}
@@ -1522,9 +1477,9 @@ export default function App() {
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 10, scale: 0.95 }}
                       transition={{ duration: 0.15 }}
-                      className="fixed sm:absolute top-16 sm:top-auto left-4 right-4 sm:left-auto sm:right-0 sm:mt-2 sm:w-80 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl z-50 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800 animate-in fade-in zoom-in-95 duration-100 flex flex-col max-h-[80vh] sm:max-h-[500px]"
+                      className="fixed sm:absolute top-[calc(3.75rem+env(safe-area-inset-top,0px))] sm:top-auto left-3 right-3 sm:left-auto sm:right-0 sm:mt-2 sm:w-80 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl z-50 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800 animate-in fade-in zoom-in-95 duration-100 flex flex-col max-h-[calc(100vh-8rem-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px))] sm:max-h-[500px]"
                     >
-                      <div className="px-4 py-3 bg-slate-900 dark:bg-black/60 flex items-center justify-between border-b border-slate-850 shadow-sm shrink-0">
+                      <div className="px-3.5 py-2.5 bg-slate-900 dark:bg-black/60 flex items-center justify-between border-b border-slate-850 shadow-sm shrink-0">
                         <span className="font-extrabold text-white text-[10px] tracking-wider uppercase flex items-center gap-1.5">
                           <Bell className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
                           Activity Hub
@@ -1542,7 +1497,7 @@ export default function App() {
                         </div>
                       </div>
                       
-                      <div className="overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/50 flex-1">
+                      <div className="overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/50 flex-1 min-h-0">
                         {myNotifications.length === 0 ? (
                           <div className="p-8 text-center text-slate-400 dark:text-slate-500 space-y-2">
                             <span className="text-2xl">🍺</span>
@@ -1563,7 +1518,7 @@ export default function App() {
                               typeColorClass = "bg-rose-500 text-white shadow-rose-300/30";
                               typeIcon = <ShieldAlert className="w-2.5 h-2.5" />;
                               badgeLabel = "Imposter Outed";
-                              badgeStyle = "bg-rose-50 text-rose-600 dark:bg-rose-95/40 dark:text-rose-400 border-rose-100 dark:border-rose-900/40";
+                              badgeStyle = "bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 border-rose-100 dark:border-rose-900/40";
                             } else if (notif.type === "bender" || notif.text.includes("BENDER ALERT")) {
                               typeColorClass = "bg-red-500 text-white animate-pulse shadow-red-300/30";
                               typeIcon = <Flame className="w-2.5 h-2.5" />;
@@ -1573,32 +1528,42 @@ export default function App() {
                               typeColorClass = "bg-indigo-500 text-white shadow-indigo-300/30";
                               typeIcon = <MessageSquare className="w-2.5 h-2.5" />;
                               badgeLabel = "Comment";
-                              badgeStyle = "bg-indigo-50 text-indigo-600 dark:bg-indigo-955/40 dark:text-indigo-400 border-indigo-100 dark:border-indigo-900/40";
+                              badgeStyle = "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-400 border-indigo-100 dark:border-indigo-900/40";
                             } else if (notif.type === "cheer" || notif.text.includes("cheered your")) {
                               typeColorClass = "bg-amber-500 text-white shadow-amber-300/30";
                               typeIcon = <Heart className="w-2.5 h-2.5" />;
                               badgeLabel = "Cheer";
-                              badgeStyle = "bg-amber-50 text-amber-700 dark:bg-amber-955/30 dark:text-amber-400 border-amber-100 dark:border-amber-900/40";
+                              badgeStyle = "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 border-amber-100 dark:border-amber-900/40";
                             } else if (notif.type === "reaction" || notif.text.includes("reacted with")) {
                               typeColorClass = "bg-pink-500 text-white shadow-pink-300/30";
                               typeIcon = <Smile className="w-2.5 h-2.5" />;
                               badgeLabel = "Reacted";
-                              badgeStyle = "bg-pink-50 text-pink-600 dark:bg-pink-95/40 dark:text-pink-400 border-pink-100 dark:border-pink-900/40";
+                              badgeStyle = "bg-pink-50 text-pink-600 dark:bg-pink-950/40 dark:text-pink-400 border-pink-100 dark:border-pink-900/40";
                             } else if (notif.type === "tag" || notif.text.includes("tagged you")) {
                               typeColorClass = "bg-teal-500 text-white shadow-teal-300/30";
                               typeIcon = <Tag className="w-2.5 h-2.5" />;
                               badgeLabel = "Tagged";
-                              badgeStyle = "bg-teal-50 text-teal-600 dark:bg-teal-95/40 dark:text-teal-400 border-teal-100 dark:border-teal-900/40";
+                              badgeStyle = "bg-teal-50 text-teal-600 dark:bg-teal-950/40 dark:text-teal-400 border-teal-100 dark:border-teal-900/40";
                             } else if (notif.type === "post" || notif.text.includes("logged a pint") || notif.text.includes("sinking") || notif.text.includes("whistle")) {
                               typeColorClass = "bg-amber-500 text-white shadow-amber-300/30";
                               typeIcon = <Beer className="w-2.5 h-2.5" />;
                               badgeLabel = "Fresh Pint";
-                              badgeStyle = "bg-amber-50 text-amber-700 dark:bg-amber-955/30 dark:text-amber-400 border-amber-100 dark:border-amber-900/40";
+                              badgeStyle = "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 border-amber-100 dark:border-amber-900/40";
                             } else if (notif.type === "invite" || notif.text.includes("invited you")) {
                               typeColorClass = "bg-emerald-500 text-white shadow-emerald-300/30";
                               typeIcon = <Users className="w-2.5 h-2.5" />;
                               badgeLabel = "Invite";
-                              badgeStyle = "bg-emerald-50 text-emerald-600 dark:bg-emerald-95/40 dark:text-emerald-400 border-emerald-100 dark:border-emerald-900/40";
+                              badgeStyle = "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 border-emerald-100 dark:border-emerald-900/40";
+                            } else if (notif.type === "beacon" || notif.text.includes("BEACON LIT")) {
+                              typeColorClass = "bg-orange-500 text-slate-950 font-black animate-pulse shadow-orange-300/30";
+                              typeIcon = <Flame className="w-2.5 h-2.5" />;
+                              badgeLabel = "Beacon Lit";
+                              badgeStyle = "bg-orange-50 text-orange-600 dark:bg-orange-950/40 dark:text-orange-400 border-orange-100 dark:border-orange-900/40";
+                            } else if (notif.type === "chat" || notif.text.includes("posted in")) {
+                              typeColorClass = "bg-sky-500 text-white shadow-sky-300/30";
+                              typeIcon = <MessageSquare className="w-2.5 h-2.5" />;
+                              badgeLabel = "Pub Chat";
+                              badgeStyle = "bg-sky-50 text-sky-600 dark:bg-sky-950/40 dark:text-sky-400 border-sky-100 dark:border-sky-900/40";
                             }
 
                              return (
@@ -1654,7 +1619,7 @@ export default function App() {
                       </div>
 
                       {/* PWA Home Screen Alerts Management (Styled sleekly as dropdown footer) */}
-                      <div className="p-3.5 bg-slate-50 dark:bg-slate-900/90 border-t border-slate-100 dark:border-slate-800 text-center flex flex-col gap-2">
+                      <div className="p-3 sm:p-3.5 bg-slate-50 dark:bg-slate-900/90 border-t border-slate-100 dark:border-slate-800 text-center flex flex-col gap-2 shrink-0">
                         <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 font-bold px-0.5">
                           <span className="flex items-center gap-1.5">
                             <Smartphone className="w-3.5 h-3.5 text-amber-500" />
@@ -1710,17 +1675,8 @@ export default function App() {
               </AnimatePresence>
             </div>
 
-            <button
-              onClick={() => fetchData(true)}
-              disabled={refreshing}
-              className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-all focus:outline-none"
-              title="Refresh logs"
-            >
-              <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin text-amber-500" : ""}`} />
-            </button>
-
             {/* Profile Dropdown with line-separated indicators */}
-            <div className="flex items-center gap-3 border-l border-slate-200 pl-4 sm:pl-6">
+            <div className="flex items-center gap-1.5 sm:gap-3 border-l border-slate-200 pl-2 sm:pl-4">
               <div className="text-right hidden sm:block">
                 <p className="text-xs font-bold text-slate-800 leading-none">{currentUser}</p>
                 <p className="text-[10px] text-amber-600 font-bold uppercase mt-1 truncate max-w-[150px]" title={getMostDrankBeerForUser(currentUser, logs)}>
@@ -1732,60 +1688,20 @@ export default function App() {
                 className="transition-all focus:outline-none hover:opacity-80 active:scale-95 shrink-0"
                 title="Switch User Profile"
               >
-                <UserAvatar username={currentUser} users={users} className="w-9 h-9 text-lg" />
+                <UserAvatar username={currentUser} users={users} className="w-8 h-8 sm:w-9 sm:h-9 text-base sm:text-lg" />
               </button>
 
               <button
                 onClick={handleLogout}
-                className="p-1.5 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-500 transition-all focus:outline-none shrink-0"
+                className="p-1 sm:p-1.5 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-500 transition-all focus:outline-none shrink-0"
                 title="Log Out"
               >
-                <LogOut className="w-4 h-4" />
+                <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </button>
             </div>
           </div>
         </div>
       </header>
-
-      {/* Mobile Navigation Sticky Bottom Bar */}
-      <div className="sm:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-[0_-4px_12px_rgba(0,0,0,0.03)] z-50 px-2 py-1.5 pb-[calc(env(safe-area-inset-bottom)+6px)] flex justify-around items-center">
-        <button
-          onClick={() => setActiveTab("feed")}
-          className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-lg transition-all flex-1 ${
-            activeTab === "feed"
-              ? "text-amber-500 bg-amber-50/50 font-bold"
-              : "text-slate-400 hover:text-slate-700 font-medium"
-          }`}
-        >
-          <Activity className="w-5 h-5" />
-          <span className="text-[10px]">Live Pints</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("pubs")}
-          className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-lg transition-all flex-1 relative ${
-            activeTab === "pubs"
-              ? "text-amber-500 bg-amber-50/50 font-bold"
-              : "text-slate-400 hover:text-slate-700 font-medium"
-          }`}
-        >
-          <Compass className="w-5 h-5" />
-          <span className="text-[10px]">Pub Hub</span>
-          {pendingInvitesCount > 0 && (
-            <span className="absolute top-1 right-6 w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
-          )}
-        </button>
-        <button
-          onClick={() => setActiveTab("stats")}
-          className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-lg transition-all flex-1 ${
-            activeTab === "stats"
-              ? "text-amber-500 bg-amber-50/50 font-bold"
-              : "text-slate-400 hover:text-slate-700 font-medium"
-          }`}
-        >
-          <BarChart3 className="w-5 h-5" />
-          <span className="text-[10px]">The Ledger</span>
-        </button>
-      </div>
 
       {/* Main Content Arena */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24 sm:pb-8">
@@ -2000,6 +1916,48 @@ export default function App() {
         onLogUpdated={handleLogUpdated}
         editLog={editLogTarget}
       />
+
+      {/* Mobile Navigation Sticky Bottom Bar */}
+      <div className="sm:hidden fixed inset-x-0 bottom-0 z-[100] bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-md border-t border-slate-800 shadow-[0_-4px_16px_rgba(0,0,0,0.4)] px-2 py-1.5 pb-[calc(env(safe-area-inset-bottom,0px)+8px)] flex justify-around items-center touch-manipulation mobile-bottom-nav">
+        <button
+          onClick={() => setActiveTab("feed")}
+          className={`flex flex-col items-center gap-1 py-1.5 px-2 rounded-xl transition-all flex-1 ${
+            activeTab === "feed"
+              ? "text-amber-400 bg-amber-500/15 font-extrabold"
+              : "text-slate-400 hover:text-slate-200 font-medium"
+          }`}
+        >
+          <Activity className="w-5 h-5" />
+          <span className="text-[10px]">Live Feed</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("pubs")}
+          className={`flex flex-col items-center gap-1 py-1.5 px-2 rounded-xl transition-all flex-1 relative ${
+            activeTab === "pubs"
+              ? "text-amber-400 bg-amber-500/15 font-extrabold"
+              : "text-slate-400 hover:text-slate-200 font-medium"
+          }`}
+        >
+          <Compass className="w-5 h-5" />
+          <span className="text-[10px]">Pub Hub</span>
+          {pendingInvitesCount > 0 && (
+            <span className="absolute top-1 right-6 w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab("stats")}
+          className={`flex flex-col items-center gap-1 py-1.5 px-2 rounded-xl transition-all flex-1 ${
+            activeTab === "stats"
+              ? "text-amber-400 bg-amber-500/15 font-extrabold"
+              : "text-slate-400 hover:text-slate-200 font-medium"
+          }`}
+        >
+          <BarChart3 className="w-5 h-5" />
+          <span className="text-[10px]">Ledger</span>
+        </button>
+      </div>
     </div>
   );
 }

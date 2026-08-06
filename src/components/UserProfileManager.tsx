@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Check, Calendar, Sparkles, X, Smile, Trash2, Trophy, Flame, Award, Shield, Heart, ZoomIn, ZoomOut, Pencil } from "lucide-react";
 import { UserProfile, BeerLog, isSeymoreBeers } from "../types";
-import { getMostDrankBeerForUser, compressImage } from "../utils";
+import { getMostDrankBeerForUser, compressImage, isImposterLog } from "../utils";
 import UserAvatar from "./UserAvatar";
 
 interface UserProfileManagerProps {
@@ -64,6 +64,7 @@ export default function UserProfileManager({
 }: UserProfileManagerProps) {
   // My Profile Edit States
   const [myRealName, setMyRealName] = useState("");
+  const [myEmail, setMyEmail] = useState("");
   const [myAvatar, setMyAvatar] = useState("🍻");
   const [myBio, setMyBio] = useState("");
   const [myPassword, setMyPassword] = useState("Pints!");
@@ -196,6 +197,7 @@ export default function UserProfileManager({
         setMyBio(profile.bio || "");
         setMyPassword(profile.password || "Pints!");
         setMyRealName(profile.realName || "");
+        setMyEmail(profile.email || "");
         setMyPhotoUrl(profile.photoUrl || null);
         setLoadedUsername(currentUser);
         setIsEditing(false);
@@ -224,6 +226,7 @@ export default function UserProfileManager({
           bio: myBio.trim(),
           password: myPassword,
           realName: myRealName.trim() || undefined,
+          email: myEmail.trim() || undefined,
           photoUrl: myPhotoUrl || undefined
         }),
       });
@@ -452,7 +455,7 @@ export default function UserProfileManager({
                       const isActive = user.username === currentUser;
                       
                       // Lightweight fallback from current active memory logs for the buddies list
-                      const uLogs = logs.filter((l) => l.user.toLowerCase() === user.username.toLowerCase());
+                      const uLogs = logs.filter((l) => l.user.toLowerCase() === user.username.toLowerCase() && !isImposterLog(l));
                       const bMemberStats = {
                         totalPints: uLogs.length,
                         benderCount: (() => {
@@ -724,7 +727,7 @@ export default function UserProfileManager({
                     </div>
                   )}
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {/* Real Name */}
                     <div>
                       <label htmlFor="my-real-name-input" className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
@@ -737,6 +740,21 @@ export default function UserProfileManager({
                         placeholder="John Doe"
                         value={myRealName}
                         onChange={(e) => setMyRealName(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 bg-white rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-800 transition-all"
+                      />
+                    </div>
+
+                    {/* Email */}
+                    <div>
+                      <label htmlFor="my-email-input" className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                        Email Address
+                      </label>
+                      <input
+                        id="my-email-input"
+                        type="email"
+                        placeholder="quin@beerreal.com"
+                        value={myEmail}
+                        onChange={(e) => setMyEmail(e.target.value)}
                         className="w-full px-3 py-2 border border-slate-200 bg-white rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-800 transition-all"
                       />
                     </div>

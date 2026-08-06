@@ -1,8 +1,9 @@
 import React, { useState, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Lock, User, PlusCircle, Smile, Sparkles, AlertCircle, Eye, EyeOff, Beer, ZoomIn, ZoomOut } from "lucide-react";
+import { Lock, User, Mail, PlusCircle, Smile, Sparkles, AlertCircle, Eye, EyeOff, Beer, ZoomIn, ZoomOut } from "lucide-react";
 import { UserProfile } from "../types";
 import { compressImage } from "../utils";
+import Logo from "./Logo";
 
 interface LoginScreenProps {
   users: UserProfile[];
@@ -24,10 +25,11 @@ export default function LoginScreen({ users, onLoginSuccess, onProfileCreated }:
   // Register state
   const [newRealName, setNewRealName] = useState("");
   const [newUsername, setNewUsername] = useState("");
+  const [newEmail, setNewEmail] = useState("");
   const [newFavoriteStyle, setNewFavoriteStyle] = useState("IPA");
   const [newAvatar, setNewAvatar] = useState("🍻");
   const [newBio, setNewBio] = useState("");
-  const [newPassword, setNewPassword] = useState("Pints!");
+  const [newPassword, setNewPassword] = useState("");
   const [newPhotoUrl, setNewPhotoUrl] = useState<string | null>(null);
 
   // Photo Cropper States for Signup
@@ -110,7 +112,7 @@ export default function LoginScreen({ users, onLoginSuccess, onProfileCreated }:
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedUser) {
-      setError("Please select a profile or type a username.");
+      setError("Please enter your username or email address.");
       return;
     }
     if (!password) {
@@ -125,7 +127,7 @@ export default function LoginScreen({ users, onLoginSuccess, onProfileCreated }:
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: selectedUser, password }),
+        body: JSON.stringify({ identifier: selectedUser, password }),
       });
 
       const data = await res.json();
@@ -135,7 +137,7 @@ export default function LoginScreen({ users, onLoginSuccess, onProfileCreated }:
 
       onLoginSuccess(data.user.username);
     } catch (err: any) {
-      setError(err.message || "Invalid username or password.");
+      setError(err.message || "Invalid username/email or password.");
     } finally {
       setLoading(false);
     }
@@ -160,12 +162,22 @@ export default function LoginScreen({ users, onLoginSuccess, onProfileCreated }:
     setError(null);
 
     try {
-      // First verify if user already exists
+      // First verify if username already exists
       const duplicate = users.some(
         (u) => u.username.toLowerCase() === newUsername.trim().toLowerCase()
       );
       if (duplicate) {
         throw new Error("Username already taken. Please choose a different name.");
+      }
+
+      // Verify if email already exists if provided
+      if (newEmail.trim()) {
+        const duplicateEmail = users.some(
+          (u) => u.email && u.email.toLowerCase() === newEmail.trim().toLowerCase()
+        );
+        if (duplicateEmail) {
+          throw new Error("This email address is already associated with another account.");
+        }
       }
 
       const res = await fetch("/api/users", {
@@ -178,7 +190,8 @@ export default function LoginScreen({ users, onLoginSuccess, onProfileCreated }:
           bio: newBio.trim(),
           password: newPassword,
           realName: newRealName.trim() || undefined,
-          photoUrl: newPhotoUrl || undefined
+          photoUrl: newPhotoUrl || undefined,
+          email: newEmail.trim() || undefined
         }),
       });
 
@@ -198,42 +211,10 @@ export default function LoginScreen({ users, onLoginSuccess, onProfileCreated }:
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        {/* Comical Creamy Draft Pint Logo */}
-        <div className="inline-flex items-end justify-center pb-1 relative w-12 h-14 mb-4">
-          {/* Foam Head */}
-          <div className="absolute top-1 w-8 h-3.5 bg-white rounded-full z-20 shadow-md border border-slate-200/50"></div>
-          {/* Pint Glass Body - tapered */}
-          <div 
-            className="w-7 h-9 bg-amber-500 relative border-l border-r border-b border-amber-600/60 overflow-hidden" 
-            style={{
-              clipPath: "polygon(0% 0%, 100% 0%, 80% 100%, 20% 100%)",
-              borderRadius: "0 0 5px 5px"
-            }}
-          >
-            {/* Beer liquid top highlight */}
-            <div className="absolute top-0 left-0 right-0 h-1.5 bg-amber-100 opacity-90"></div>
-            {/* Condensation glow inside */}
-            <div className="absolute top-1 left-0.5 right-0.5 bottom-0 bg-gradient-to-b from-amber-400 to-amber-600 opacity-90"></div>
-            {/* Bubbles */}
-            <div className="absolute bottom-1 left-2 w-1 h-1 bg-white/70 rounded-full animate-ping"></div>
-            <div className="absolute bottom-2.5 right-2 w-1 h-1 bg-white/60 rounded-full animate-pulse"></div>
-            <div className="absolute bottom-1 right-3 w-1 h-1 bg-amber-200 rounded-full opacity-85"></div>
-          </div>
-          {/* Glass Rim highlight/outer shine */}
-          <div 
-            className="absolute top-1 w-8 h-9 pointer-events-none border-l border-r border-b border-white/40 rounded-b-[4px]"
-            style={{
-              clipPath: "polygon(0% 0%, 100% 0%, 80% 100%, 20% 100%)",
-            }}
-          ></div>
-        </div>
-
-        <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">
-          Beer <span className="text-amber-500">real</span>
-        </h2>
-        <p className="mt-2 text-sm text-slate-500 font-medium">
+    <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 pt-safe">
+      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center flex flex-col items-center">
+        <Logo size="lg" className="justify-center mb-3" />
+        <p className="mt-1 text-sm text-slate-500 font-medium">
           Check in, rate pints, and see what your friends are drinking.
         </p>
       </div>
@@ -298,45 +279,14 @@ export default function LoginScreen({ users, onLoginSuccess, onProfileCreated }:
                 onSubmit={handleLoginSubmit}
                 className="space-y-5"
               >
-                <div>
-                  <label className="block text-xs font-extrabold text-slate-600 uppercase tracking-wider mb-2">
-                    Select Profile
-                  </label>
-                  <div className="grid grid-cols-3 gap-2 max-h-[160px] overflow-y-auto pr-1">
-                    {users.map((u) => {
-                      const isSelected = selectedUser === u.username;
-                      return (
-                        <button
-                          key={u.username}
-                          type="button"
-                          onClick={() => {
-                            setSelectedUser(u.username);
-                            setError(null);
-                          }}
-                          className={`flex flex-col items-center p-2.5 rounded-xl border text-center transition-all ${
-                            isSelected
-                              ? "bg-amber-50 border-amber-400 ring-2 ring-amber-500/10"
-                              : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"
-                          }`}
-                        >
-                          <span className="text-2xl mb-1">{u.avatar || "👤"}</span>
-                          <span className="text-xs font-bold text-slate-800 truncate w-full">
-                            {u.username}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Or type a username */}
+                {/* Username or email input */}
                 <div>
                   <label className="block text-xs font-extrabold text-slate-600 uppercase tracking-wider mb-1.5">
-                    Or Type Username
+                    Username / Email
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <User className="h-4 w-4 text-slate-400" />
+                      <Mail className="h-4 w-4 text-slate-400" />
                     </div>
                     <input
                       type="text"
@@ -345,7 +295,7 @@ export default function LoginScreen({ users, onLoginSuccess, onProfileCreated }:
                         setSelectedUser(e.target.value);
                         setError(null);
                       }}
-                      placeholder="Username"
+                      placeholder="Username or email address"
                       className="block w-full pl-10 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 placeholder-slate-400 transition-all"
                     />
                   </div>
@@ -439,6 +389,24 @@ export default function LoginScreen({ users, onLoginSuccess, onProfileCreated }:
                         setNewUsername(cleanVal);
                       }}
                       placeholder="e.g. Seymore Beers"
+                      className="block w-full pl-10 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 placeholder-slate-400 transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-extrabold text-slate-600 uppercase tracking-wider mb-1.5">
+                    Email Address (Optional)
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Mail className="h-4 w-4 text-slate-400" />
+                    </div>
+                    <input
+                      type="email"
+                      value={newEmail}
+                      onChange={(e) => setNewEmail(e.target.value)}
+                      placeholder="e.g. quin@beerreal.com"
                       className="block w-full pl-10 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 placeholder-slate-400 transition-all"
                     />
                   </div>
@@ -564,7 +532,7 @@ export default function LoginScreen({ users, onLoginSuccess, onProfileCreated }:
                       type={showPassword ? "text" : "password"}
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="e.g. Pints!"
+                      placeholder="Create a password"
                       className="block w-full pl-10 pr-10 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 placeholder-slate-400 transition-all"
                     />
                     <button

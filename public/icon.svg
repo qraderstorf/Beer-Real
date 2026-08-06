@@ -1,24 +1,66 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <rect width="512" height="512" rx="128" fill="#0f172a"/>
-  <g transform="translate(64, 64) scale(0.75)">
-    <!-- Left Mug -->
-    <path d="M120,160 L240,160 L240,360 C240,400 200,420 160,420 L160,420 C120,420 80,400 80,360 L80,160 Z" fill="#f59e0b" stroke="#fef08a" stroke-width="12"/>
-    <!-- Foam Left -->
-    <path d="M70,160 C70,120 120,100 150,130 C170,100 210,100 230,130 C250,110 260,130 250,160 Z" fill="#ffffff" />
-    <!-- Handle Left -->
-    <path d="M80,200 L40,200 C20,200 20,300 40,300 L80,300" fill="none" stroke="#fef08a" stroke-width="12" stroke-linecap="round"/>
-    
-    <!-- Right Mug (clinking) -->
-    <g transform="translate(384, 0) scale(-1, 1)">
-      <path d="M120,160 L240,160 L240,360 C240,400 200,420 160,420 L160,420 C120,420 80,400 80,360 L80,160 Z" fill="#d97706" stroke="#fef08a" stroke-width="12"/>
-      <path d="M70,160 C70,120 120,100 150,130 C170,100 210,100 230,130 C250,110 260,130 250,160 Z" fill="#ffffff" />
-      <path d="M80,200 L40,200 C20,200 20,300 40,300 L80,300" fill="none" stroke="#fef08a" stroke-width="12" stroke-linecap="round"/>
+  <defs>
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#1e293b" />
+    </linearGradient>
+    <radialGradient id="glow-grad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.25" />
+      <stop offset="100%" stop-color="#f59e0b" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="mug-left-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fcd34d" />
+      <stop offset="50%" stop-color="#f59e0b" />
+      <stop offset="100%" stop-color="#d97706" />
+    </linearGradient>
+    <linearGradient id="mug-right-grad" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fcd34d" />
+      <stop offset="50%" stop-color="#f59e0b" />
+      <stop offset="100%" stop-color="#d97706" />
+    </linearGradient>
+  </defs>
+
+  <!-- Dark Slate Rounded Background -->
+  <rect width="512" height="512" rx="112" fill="url(#bg-grad)" />
+  <rect width="512" height="512" rx="112" fill="url(#glow-grad)" />
+  <rect x="3" y="3" width="506" height="506" rx="109" fill="none" stroke="#f59e0b" stroke-width="4" stroke-opacity="0.35" />
+
+  <!-- Clinking Beer Mugs Artwork -->
+  <g transform="translate(256, 256) scale(7.4) translate(-32, -24)">
+    <!-- Toast Clink Impact Sparkles / Liquid Splash -->
+    <g>
+      <path d="M32 5L33.2 9.2L37 10.5L33.2 11.8L32 16L30.8 11.8L27 10.5L30.8 9.2L32 5Z" fill="#F59E0B" />
+      <circle cx="32" cy="20" r="1.5" fill="#FBBF24" />
+      <circle cx="28.5" cy="7.5" r="1" fill="#F59E0B" />
+      <circle cx="35.5" cy="7.5" r="1" fill="#FBBF24" />
     </g>
 
-    <!-- Sparkles/Cheers indicator -->
-    <circle cx="256" cy="180" r="12" fill="#ffffff" />
-    <path d="M256,120 L256,150" stroke="#fef08a" stroke-width="8" stroke-linecap="round"/>
-    <path d="M210,140 L230,160" stroke="#fef08a" stroke-width="8" stroke-linecap="round"/>
-    <path d="M302,140 L282,160" stroke="#fef08a" stroke-width="8" stroke-linecap="round"/>
+    <!-- LEFT BEER MUG -->
+    <g transform="translate(6, 0)">
+      <g transform="translate(14, 25) rotate(13) translate(-14, -25)">
+        <path d="M7 21C4.5 21 3 23 3 26.5C3 30 4.5 32 7 32" stroke="#D97706" stroke-width="2.5" stroke-linecap="round" fill="none" />
+        <path d="M7 22.5C5.5 22.5 4.5 24 4.5 26.5C4.5 29 5.5 30.5 7 30.5" stroke="#FBBF24" stroke-width="1" stroke-linecap="round" fill="none" />
+        <rect x="7" y="18" width="14" height="18" rx="2" fill="url(#mug-left-grad)" stroke="#B45309" stroke-width="1.2" />
+        <path d="M11 21V33" stroke="#FEF08A" stroke-width="1.2" stroke-linecap="round" opacity="0.6" />
+        <path d="M15 21V33" stroke="#FEF08A" stroke-width="1.2" stroke-linecap="round" opacity="0.6" />
+        <path d="M19 21V33" stroke="#D97706" stroke-width="1" stroke-linecap="round" opacity="0.4" />
+        <path d="M5.5 18C5.5 15.5 7.5 14 9.5 14C10.5 14 11.2 14.5 11.8 15C12.5 14.2 13.8 13.5 15 13.5C16.5 13.5 17.8 14.5 18.2 15.2C18.8 14.8 19.8 14.5 20.5 14.5C22 14.5 23 16 23 18C23 18.8 22.5 19.5 22 20H6.5C6 19.5 5.5 18.8 5.5 18Z" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" />
+        <path d="M21 19.5C21.5 21 21 22.5 20 23" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" />
+      </g>
+    </g>
+
+    <!-- RIGHT BEER MUG -->
+    <g transform="translate(-6, 0)">
+      <g transform="translate(50, 25) rotate(-13) translate(-50, -25)">
+        <path d="M57 21C59.5 21 61 23 61 26.5C61 30 59.5 32 57 32" stroke="#D97706" stroke-width="2.5" stroke-linecap="round" fill="none" />
+        <path d="M57 22.5C58.5 22.5 59.5 24 59.5 26.5C59.5 29 58.5 30.5 57 30.5" stroke="#FBBF24" stroke-width="1" stroke-linecap="round" fill="none" />
+        <rect x="43" y="18" width="14" height="18" rx="2" fill="url(#mug-right-grad)" stroke="#B45309" stroke-width="1.2" />
+        <path d="M47 21V33" stroke="#D97706" stroke-width="1" stroke-linecap="round" opacity="0.4" />
+        <path d="M51 21V33" stroke="#FEF08A" stroke-width="1.2" stroke-linecap="round" opacity="0.6" />
+        <path d="M55 21V33" stroke="#FEF08A" stroke-width="1.2" stroke-linecap="round" opacity="0.6" />
+        <path d="M41 18C41 16 42 14.5 43.5 14.5C44.2 14.5 45.2 14.8 45.8 15.2C46.2 14.5 47.5 13.5 49 13.5C50.2 13.5 51.5 14.2 52.2 15C52.8 14.5 53.5 14 54.5 14C56.5 14 58.5 15.5 58.5 18C58.5 18.8 58 19.5 57.5 20H42C41.5 19.5 41 18.8 41 18Z" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" />
+        <path d="M43 19.5C42.5 21 43 22.5 44 23" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" />
+      </g>
+    </g>
   </g>
 </svg>

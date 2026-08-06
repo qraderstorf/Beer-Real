@@ -37,7 +37,7 @@ import {
   Line
 } from "recharts";
 import { BeerLog, UserProfile, TimeFilter, Pub } from "../types";
-import { getMostDrankBeerForUser } from "../utils";
+import { getMostDrankBeerForUser, isImposterLog } from "../utils";
 import UserAvatar from "./UserAvatar";
 
 interface StatisticsProps {
@@ -245,13 +245,19 @@ export default function Statistics({
           }
         }
 
-        // Final fallback if both API and direct Firestore failed or are disabled: filter logs from props
-        if (!fetchedFromApi && fetchedBeers.length === 0 && logs && logs.length > 0) {
+        // Always merge any live logs from props that fall within date range to ensure instant update in The Ledger
+        if (logs && logs.length > 0) {
           const start = new Date(startDateStr).getTime();
           const end = new Date(endDateStr).getTime();
-          fetchedBeers = logs.filter((l) => {
-            const t = new Date(l.date).getTime();
-            return t >= start && t <= end;
+          const seenIds = new Set(fetchedBeers.map((b) => b.id));
+          logs.forEach((l) => {
+            if (l && l.id && !seenIds.has(l.id)) {
+              const t = new Date(l.date).getTime();
+              if (t >= start && t <= end) {
+                fetchedBeers.push(l);
+                seenIds.add(l.id);
+              }
+            }
           });
         }
 
@@ -259,6 +265,9 @@ export default function Statistics({
           console.warn("[Statistics] Query reached dataset limit of 500 logs. Displaying warning badge in UI.");
         }
         setIsDataTruncated(hitLimit);
+
+        // Filter out imposter logs (logs with 3 or more imposter/dislike votes) from beer statistics
+        fetchedBeers = fetchedBeers.filter((b) => !isImposterLog(b));
 
         // Compute high-precision aggregation metrics for each member client-side from the already-fetched beers!
         // This completely eliminates any direct Firestore aggregation reads, resulting in 0 reads for this step.

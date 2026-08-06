@@ -3,6 +3,7 @@ export interface ActivityComment {
   user: string;
   text: string;
   date: string;
+  reactions?: Record<string, string[]>;
 }
 
 export interface BeerLog {
@@ -31,6 +32,7 @@ export interface UserProfile {
   password?: string;
   realName?: string;
   photoUrl?: string;
+  email?: string;
   stats?: {
     totalPints: number;
     avgRating: string;
@@ -59,7 +61,7 @@ export interface AppNotification {
   date: string;
   readBy: string[];
   targetUser?: string;
-  type?: 'post' | 'comment' | 'cheer' | 'reaction' | 'bender' | 'invite' | 'tag' | 'imposter';
+  type?: 'post' | 'comment' | 'cheer' | 'reaction' | 'bender' | 'invite' | 'tag' | 'imposter' | 'beacon' | 'chat';
 }
 
 export interface Pub {
