@@ -570,10 +570,6 @@ async function sendFCMNotification(targetUser: string | null, title: string, bod
     for (const token of tokens) {
       const message = {
         token: token,
-        notification: {
-          title: title,
-          body: body
-        },
         data: {
           click_action: "/",
           ...payload
@@ -671,7 +667,6 @@ async function sendFcmPushForNotification(notif: AppNotification) {
         for (const token of recipientTokens) {
           const message = {
             token: token,
-            notification: { title, body },
             data: { click_action: "/", notificationId: notif.id, type: notif.type },
             webpush: {
               headers: {

@@ -411,11 +411,27 @@ export default function Statistics({
       startDate = new Date(now.getFullYear(), now.getMonth(), 1);
       endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
     } else if (rangeFilter === "all_time") {
-      startDate = new Date(absoluteMinDate);
-      endDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+      // Expand day by day starting from earliest logged beer up to today
+      let minTime = Infinity;
+      if (filteredPubLogs && filteredPubLogs.length > 0) {
+        filteredPubLogs.forEach((l) => {
+          const t = new Date(l.date).getTime();
+          if (!isNaN(t) && t < minTime) minTime = t;
+        });
+      }
+      if (minTime !== Infinity) {
+        startDate = new Date(minTime);
+        startDate.setHours(0, 0, 0, 0);
+      } else {
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - 6);
+        startDate.setHours(0, 0, 0, 0);
+      }
+      endDate = new Date(now);
+      endDate.setHours(23, 59, 59, 999);
     }
 
-    // Clip the future portion of endDate for all_time and this_month so the graph ends at today and grows dynamically
+    // Clip the future portion of endDate for all_time and this_month so the graph ends at today and grows dynamically day by day
     if (rangeFilter === "this_month" || rangeFilter === "all_time") {
       const todayEnd = new Date(now);
       todayEnd.setHours(23, 59, 59, 999);
@@ -429,7 +445,7 @@ export default function Statistics({
     }
 
     return { startDate, endDate };
-  }, [rangeFilter, absoluteMinDate]);
+  }, [rangeFilter, absoluteMinDate, filteredPubLogs]);
 
   // Helper to check if a log falls into the selected time frame
   const filteredLogs = useMemo(() => {
@@ -447,40 +463,10 @@ export default function Statistics({
     });
   }, [filteredPubLogs, dateRange, excludedUsers]);
 
-  // Determine grouping viewMode automatically from the selected range filter with dynamic scaling
+  // Expand graph day by day for all range filters including all_time
   const viewMode = useMemo<"daily" | "weekly" | "monthly">(() => {
-    if (rangeFilter === "this_week" || rangeFilter === "last_week") {
-      return "daily";
-    }
-    if (rangeFilter === "this_month") {
-      // Monthly range is represented by days on the axis, so the numbers increase day by day
-      return "daily";
-    }
-    
-    // For "all_time", we scale dynamically:
-    // Starts as daily (this week), then moves to weekly, and finally to monthly as data spans more days.
-    if (filteredLogs.length === 0) {
-      return "daily";
-    }
-
-    const logTimes = filteredLogs.map((l) => new Date(l.date).getTime()).filter((t) => !isNaN(t));
-    if (logTimes.length === 0) {
-      return "daily";
-    }
-
-    const minTime = Math.min(...logTimes);
-    const maxTime = Math.max(...logTimes);
-    const diffMs = maxTime - minTime;
-    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-
-    if (diffDays <= 7) {
-      return "daily"; // Starts as daily (like this week)
-    } else if (diffDays <= 60) {
-      return "weekly"; // Moves to weekly as time goes
-    } else {
-      return "monthly"; // Moves to monthly
-    }
-  }, [rangeFilter, filteredLogs]);
+    return "daily";
+  }, []);
 
   // Calculated Metrics
   const metrics = useMemo(() => {
@@ -549,10 +535,14 @@ export default function Statistics({
       const current = new Date(startDate);
       current.setHours(0, 0, 0, 0);
 
+      const isMultiWeek = (endDate.getTime() - startDate.getTime()) > 14 * 24 * 60 * 60 * 1000;
+
       // Create daily buckets
       while (current <= endDate) {
-        // Prettier label: DayOfWeek DayNumber (e.g. "Tue 14")
-        const dateStr = current.toLocaleDateString(undefined, { weekday: "short", day: "numeric" });
+        // Show month and day (e.g., "Jan 14") if range is > 14 days, else weekday & day (e.g., "Tue 14")
+        const dateStr = isMultiWeek
+          ? current.toLocaleDateString(undefined, { month: "short", day: "numeric" })
+          : current.toLocaleDateString(undefined, { weekday: "short", day: "numeric" });
         const key = current.toDateString();
         buckets.push({
           label: dateStr,
@@ -1229,6 +1219,7 @@ export default function Statistics({
                     tickLine={{ stroke: '#475569', strokeWidth: 1.5 }}
                     axisLine={{ stroke: '#94a3b8', strokeWidth: 1.5 }}
                     tick={{ fontSize: 11, fill: '#334155', fontWeight: 700 }}
+                    minTickGap={15}
                   />
                   <YAxis 
                     allowDecimals={false} 
