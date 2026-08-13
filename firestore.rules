@@ -1,24 +1,31 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Standard rules for public beers and users lists
-    match /users/{username} {
-      allow read, write: if true;
-    }
+    // The Express server (server.ts) performs all reads/writes via the
+    // Firebase Admin SDK, which bypasses these rules entirely. These rules
+    // only govern *direct* client access from the browser.
+
+    // Live activity feed reads directly from the client (src/App.tsx onSnapshot).
     match /beers/{beerId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Contains plaintext passwords - never expose to direct client reads.
+    match /users/{username} {
+      allow read, write: if false;
     }
     match /notifications/{notificationId} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
     match /pubs/{pubId} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
     match /pub_messages/{messageId} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
     match /fcm_tokens/{tokenId} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
   }
 }
