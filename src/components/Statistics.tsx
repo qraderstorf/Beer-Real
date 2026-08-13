@@ -20,6 +20,8 @@ import {
 } from "lucide-react";
 import {
   ResponsiveContainer,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -27,9 +29,7 @@ import {
   Legend,
   PieChart,
   Pie,
-  Cell,
-  LineChart,
-  Line
+  Cell
 } from "recharts";
 import { BeerLog, UserProfile, TimeFilter, Pub } from "../types";
 import { getMostDrankBeerForUser, isImposterLog } from "../utils";
@@ -1176,17 +1176,28 @@ export default function Statistics({
           </div>
         )}
 
-        {userComparisonData.length > leaderboardVisibleCount && (
-          <div className="flex items-center justify-center gap-3 pt-1">
-            <button
-              type="button"
-              onClick={() => setLeaderboardVisibleCount((c) => Math.min(c + LEADERBOARD_PAGE_SIZE, userComparisonData.length))}
-              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-extrabold rounded-lg transition-all cursor-pointer"
-            >
-              Show {Math.min(LEADERBOARD_PAGE_SIZE, userComparisonData.length - leaderboardVisibleCount)} More
-            </button>
+        {(userComparisonData.length > leaderboardVisibleCount || leaderboardVisibleCount > LEADERBOARD_PAGE_SIZE) && (
+          <div className="flex items-center justify-center gap-3 pt-1 flex-wrap">
+            {userComparisonData.length > leaderboardVisibleCount && (
+              <button
+                type="button"
+                onClick={() => setLeaderboardVisibleCount((c) => Math.min(c + LEADERBOARD_PAGE_SIZE, userComparisonData.length))}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-extrabold rounded-lg transition-all cursor-pointer"
+              >
+                Show {Math.min(LEADERBOARD_PAGE_SIZE, userComparisonData.length - leaderboardVisibleCount)} More
+              </button>
+            )}
+            {leaderboardVisibleCount > LEADERBOARD_PAGE_SIZE && (
+              <button
+                type="button"
+                onClick={() => setLeaderboardVisibleCount(LEADERBOARD_PAGE_SIZE)}
+                className="px-4 py-2 bg-transparent hover:bg-slate-100 text-slate-500 text-xs font-extrabold rounded-lg transition-all cursor-pointer border border-slate-200"
+              >
+                Show Less
+              </button>
+            )}
             <span className="text-[10px] text-slate-400 font-bold">
-              {leaderboardVisibleCount} of {userComparisonData.length}
+              {Math.min(leaderboardVisibleCount, userComparisonData.length)} of {userComparisonData.length}
             </span>
           </div>
         )}
@@ -1210,10 +1221,6 @@ export default function Statistics({
           {topGraphUsers.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-slate-50/80 border border-slate-200/70 rounded-lg">
               <span className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 mr-0.5 pl-1">Key:</span>
-              <div className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-800 border border-slate-700 rounded-md text-[11px] font-medium text-white shadow-2xs">
-                <span className="w-3 h-0.5 rounded-full shrink-0 bg-slate-400" />
-                <span className="font-bold">Total</span>
-              </div>
               {topGraphUsers.map((user, index) => {
                 const color = COLORS[index % COLORS.length];
                 const userPintsCount = filteredLogs.filter(l => l.user === user).length;
@@ -1242,54 +1249,53 @@ export default function Statistics({
               <div className="h-full flex items-center justify-center text-slate-400 italic">No logs within filtered period</div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={timelineChartData} margin={{ top: 15, right: 15, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={true} stroke="#e2e8f0" />
+                <AreaChart data={timelineChartData} margin={{ top: 15, right: 10, left: 0, bottom: 0 }}>
+                  <defs>
+                    {topGraphUsers.map((user, index) => (
+                      <linearGradient key={user} id={`ledgerGrad-${index}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={COLORS[index % COLORS.length]} stopOpacity={0.35} />
+                        <stop offset="95%" stopColor={COLORS[index % COLORS.length]} stopOpacity={0} />
+                      </linearGradient>
+                    ))}
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                   <XAxis
                     dataKey="date"
-                    stroke="#475569"
-                    tickLine={{ stroke: '#475569', strokeWidth: 1.5 }}
-                    axisLine={{ stroke: '#94a3b8', strokeWidth: 1.5 }}
+                    tickLine={false}
+                    axisLine={false}
                     tick={{ fontSize: 11, fill: '#334155', fontWeight: 700 }}
                     minTickGap={15}
                   />
                   <YAxis
                     allowDecimals={false}
-                    stroke="#475569"
-                    tickLine={{ stroke: '#475569', strokeWidth: 1.5 }}
-                    axisLine={{ stroke: '#94a3b8', strokeWidth: 1.5 }}
+                    tickLine={false}
+                    axisLine={false}
                     tick={{ fontSize: 11, fill: '#334155', fontWeight: 700 }}
+                    domain={[0, 'dataMax']}
                   />
                   <Tooltip
                     formatter={(val: any, name: any) => {
                       const rounded = Math.round(Number(val));
                       return [`${rounded} ${rounded === 1 ? 'pint' : 'pints'}`, name];
                     }}
-                    contentStyle={{ backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)' }}
-                    labelStyle={{ fontWeight: 'bold', color: '#1e293b' }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="Total"
-                    stroke="#94a3b8"
-                    strokeWidth={2}
-                    strokeDasharray="5 4"
-                    dot={false}
-                    activeDot={{ r: 4 }}
-                    name="Community Total"
+                    contentStyle={{ backgroundColor: '#161d2f', border: '1px solid #242f49', borderRadius: '10px', boxShadow: '0 8px 20px 0 rgb(0 0 0 / 0.35)' }}
+                    labelStyle={{ fontWeight: 'bold', color: '#f1f5f9' }}
+                    itemStyle={{ fontWeight: 600 }}
                   />
                   {topGraphUsers.map((user, index) => (
-                    <Line
+                    <Area
                       key={user}
                       type="monotone"
                       dataKey={user}
                       stroke={COLORS[index % COLORS.length]}
                       strokeWidth={2.5}
+                      fill={`url(#ledgerGrad-${index})`}
                       dot={false}
-                      activeDot={{ r: 5 }}
+                      activeDot={{ r: 5, strokeWidth: 2, stroke: '#0b0f19' }}
                       name={`${user}'s Pints`}
                     />
                   ))}
-                </LineChart>
+                </AreaChart>
               </ResponsiveContainer>
             )}
           </div>
