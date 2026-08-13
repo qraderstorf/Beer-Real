@@ -1,6 +1,15 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
+/* This app forces dark mode unconditionally (see App.tsx - .dark is always
+   added to <html>, no light mode exists). Without this, Tailwind v4's
+   `dark:` variant defaults to a `prefers-color-scheme` media query, so any
+   `dark:` class in the codebase only applied on devices whose OS happened
+   to prefer dark - everyone else silently got the light-mode fallback
+   colors on an otherwise all-dark app. This ties `dark:` to the class that's
+   actually always present instead. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;

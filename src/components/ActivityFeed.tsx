@@ -876,7 +876,7 @@ export default function ActivityFeed({
                   )}
 
                   {/* Log Header */}
-                  <div className="p-4 flex items-center justify-between border-b border-slate-100 bg-slate-50/20">
+                  <div className="p-4 flex items-center justify-between border-b border-slate-100 dark:border-slate-800">
                     <div className="flex items-center gap-3">
                       <div 
                         className="cursor-pointer hover:opacity-80 transition-opacity"
@@ -1012,6 +1012,9 @@ export default function ActivityFeed({
 
                     {/* Reaction Bar & Preset Buttons */}
                     {(() => {
+                      // Reactions nobody has used yet stay muted/ghosted so the bar doesn't
+                      // shout five colors at once - color is reserved for genuine engagement.
+                      const ghostClass = "bg-transparent text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60";
                       const presets = [
                         { 
                           key: "cheers", 
@@ -1083,7 +1086,9 @@ export default function ActivityFeed({
                                     className={`flex items-center gap-1.5 py-1 px-2.5 rounded-full text-[10px] font-extrabold border transition-all duration-150 active:scale-95 hover:scale-105 cursor-pointer select-none ${
                                       hasReacted
                                         ? `${react.activeClass} font-black`
-                                        : `${react.unselectedClass}`
+                                        : count > 0
+                                        ? react.unselectedClass
+                                        : ghostClass
                                     }`}
                                   >
                                     <span className="text-[12px]">{react.emoji}</span>
