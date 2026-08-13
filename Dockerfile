@@ -12,4 +12,5 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/public ./public
+COPY --from=build /app/firebase-applet-config.json ./firebase-applet-config.json
 CMD ["node", "dist/server.cjs"]
