@@ -161,6 +161,58 @@ body {
   color: #fca5a5 !important;
 }
 
+.dark .bg-orange-50 {
+  background-color: #271607 !important;
+  border-color: #7c2d12 !important;
+}
+
+.dark .text-orange-700 {
+  color: #fb923c !important;
+}
+
+.dark .border-orange-100 {
+  border-color: #7c2d12 !important;
+}
+
+.dark .bg-emerald-50 {
+  background-color: #0a2318 !important;
+  border-color: #065f46 !important;
+}
+
+.dark .text-emerald-700 {
+  color: #34d399 !important;
+}
+
+.dark .border-emerald-100 {
+  border-color: #065f46 !important;
+}
+
+.dark .bg-sky-50 {
+  background-color: #0a1f2e !important;
+  border-color: #075985 !important;
+}
+
+.dark .text-sky-700 {
+  color: #38bdf8 !important;
+}
+
+.dark .border-sky-100 {
+  border-color: #075985 !important;
+}
+
+.dark .bg-cyan-50 {
+  background-color: #082226 !important;
+  border-color: #155e63 !important;
+}
+
+.dark .text-cyan-700 {
+  color: #22d3ee !important;
+}
+
+.dark .border-cyan-100 {
+  border-color: #155e63 !important;
+}
+
 /* Make sure the custom dot or lines in recharts align with dark mode */
 .dark .recharts-cartesian-grid-horizontal line,
 .dark .recharts-cartesian-grid-vertical line {

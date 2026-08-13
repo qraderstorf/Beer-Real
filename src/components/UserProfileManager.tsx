@@ -17,6 +17,7 @@ interface UserProfileManagerProps {
   onClose: () => void;
   viewingUsername?: string | null;
   clientUseFirestore: boolean;
+  onViewProfileRequested?: (username: string) => void;
 }
 
 const COMMON_EMOJIS = ["🍻", "🍺", "☕", "🍋", "🍊", "🍷", "🍹", "🥂", "🥃", "🍔", "🍕", "😎", "👾", "🦊", "🐼", "🦁", "👑"];
@@ -51,6 +52,18 @@ function getDayDifference(dateStr1: string, dateStr2: string): number {
   return Math.round(diffTime / (1000 * 60 * 60 * 24));
 }
 
+function StatChip({ label, value, emoji, colorClass }: { label: string; value: string | number; emoji: string; colorClass: string }) {
+  return (
+    <div className={`rounded-xl p-2.5 flex flex-col items-center justify-center text-center border ${colorClass}`}>
+      <span className="text-[8px] font-bold uppercase tracking-wider opacity-70">{label}</span>
+      <span className="text-base font-black mt-0.5 flex items-center gap-1">
+        <span>{emoji}</span>
+        <span>{value}</span>
+      </span>
+    </div>
+  );
+}
+
 export default function UserProfileManager({
   users,
   currentUser,
@@ -61,7 +74,8 @@ export default function UserProfileManager({
   isOpen,
   onClose,
   viewingUsername,
-  clientUseFirestore
+  clientUseFirestore,
+  onViewProfileRequested
 }: UserProfileManagerProps) {
   // My Profile Edit States
   const [myRealName, setMyRealName] = useState("");
@@ -340,68 +354,77 @@ export default function UserProfileManager({
           {!showEditForm ? (
             /* VIEW PROFILE (EITHER OTHER USER OR SELF) */
             <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row items-center gap-5 pb-5 border-b border-slate-100">
-                <UserAvatar username={targetUser.username} users={users} className="w-20 h-20 text-3xl border-2 border-amber-500" />
-                <div className="text-center sm:text-left space-y-1 min-w-0 flex-1">
-                  <span className="text-[10px] font-extrabold text-amber-600 uppercase tracking-wider block">
-                    {isViewOnly ? "Pub Member Profile" : "My Pub Profile"}
-                  </span>
-                  <h3 className="text-lg font-black text-slate-800 tracking-tight truncate">
-                    {targetUser.realName || targetUser.username}
-                  </h3>
-                  <span className="text-xs text-slate-400 font-bold block">@{targetUser.username}</span>
-                  <p className="text-xs text-slate-500 italic font-semibold leading-relaxed mt-2">
-                    "{targetUser.bio || "No bio added yet."}"
-                  </p>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-center sm:justify-start gap-3 pt-2">
-                    <div className="flex items-center justify-center sm:justify-start gap-1 text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                      <Calendar className="w-3.5 h-3.5 text-slate-300" />
-                      <span>Joined {targetUser.joinedDate}</span>
-                    </div>
+              <div className="flex items-center gap-4 pb-5 border-b border-slate-100">
+                <UserAvatar username={targetUser.username} users={users} className="w-16 h-16 sm:w-20 sm:h-20 text-2xl sm:text-3xl border-2 border-amber-500 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-black text-slate-800 tracking-tight truncate">
+                      {targetUser.realName || targetUser.username}
+                    </h3>
                     {!isViewOnly && (
                       <button
                         onClick={() => setIsEditing(true)}
-                        className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-extrabold rounded-lg transition-all shadow-sm flex items-center justify-center gap-1 cursor-pointer"
+                        title="Edit Profile"
+                        className="p-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-all shadow-sm cursor-pointer shrink-0"
                       >
-                        <Pencil className="w-3.5 h-3.5" /> Edit Profile
+                        <Pencil className="w-3.5 h-3.5" />
                       </button>
                     )}
+                  </div>
+                  <span className="text-xs text-slate-400 font-bold block">@{targetUser.username}</span>
+                  <p className="text-xs text-slate-500 italic font-medium leading-snug mt-1.5 line-clamp-2">
+                    "{targetUser.bio || "No bio added yet."}"
+                  </p>
+                  <div className="flex items-center gap-1 text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-1.5">
+                    <Calendar className="w-3 h-3 text-slate-300" />
+                    <span>Joined {targetUser.joinedDate}</span>
                   </div>
                 </div>
               </div>
 
               {/* Stats Section */}
-              <div className="space-y-3">
+              <div className="space-y-2.5">
                 <span className="block text-xs font-bold uppercase tracking-wider text-slate-400">
                   {isViewOnly ? "Career Stats" : "My Career Stats"}
                 </span>
                 {loadingStats || !profileStats ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {[1, 2, 3, 4, 5, 6, 7, 8].map((idx) => (
-                      <div key={idx} className="bg-slate-50/50 border border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center shadow-inner animate-pulse h-[82px]">
-                        <div className="h-2.5 w-12 bg-slate-200 rounded mb-2"></div>
-                        <div className="h-6 w-8 bg-slate-200 rounded"></div>
-                      </div>
-                    ))}
+                  <div className="space-y-2.5">
+                    <div className="grid grid-cols-2 gap-2.5">
+                      {[1, 2].map((idx) => (
+                        <div key={idx} className="bg-slate-100 rounded-2xl h-20 animate-pulse" />
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[1, 2, 3, 4, 5, 6].map((idx) => (
+                        <div key={idx} className="bg-slate-100 rounded-xl h-16 animate-pulse" />
+                      ))}
+                    </div>
                   </div>
                 ) : statsError ? (
                   <div className="text-xs text-red-500 font-semibold p-2 bg-red-50 rounded-lg">
                     ⚠️ {statsError}
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div className="bg-slate-50/50 border border-slate-200 rounded-xl p-3 flex flex-col items-center justify-center text-center shadow-inner">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Pints</span>
-                      <span className="text-2xl font-black text-amber-500 mt-1">{profileStats.totalPints}</span>
+                  <div className="space-y-2.5">
+                    {/* Hero stats */}
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div className="bg-gradient-to-br from-amber-400 to-orange-500 rounded-2xl p-3.5 text-slate-950 shadow-md">
+                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-950/60">Total Pints</span>
+                        <div className="text-2xl sm:text-3xl font-black mt-0.5">🍺 {profileStats.totalPints}</div>
+                      </div>
+                      <div className="bg-gradient-to-br from-amber-300 to-yellow-500 rounded-2xl p-3.5 text-slate-950 shadow-md">
+                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-950/60">Avg Rating</span>
+                        <div className="text-2xl sm:text-3xl font-black mt-0.5">⭐ {profileStats.avgRating}</div>
+                      </div>
                     </div>
-                    <div className="bg-slate-50/50 border border-slate-200 rounded-xl p-3 flex flex-col items-center justify-center text-center shadow-inner">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Avg Rating</span>
-                      <span className="text-2xl font-black text-amber-500 mt-1">⭐ {profileStats.avgRating}</span>
-                    </div>
-                    <div className="bg-slate-50/50 border border-slate-200 rounded-xl p-3 flex flex-col items-center justify-center text-center shadow-inner">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Beer/Day</span>
-                      <span className="text-2xl font-black text-amber-600 mt-1">
-                        🍺 {(() => {
+
+                    {/* Secondary stats */}
+                    <div className="grid grid-cols-3 gap-2">
+                      <StatChip
+                        label="Beer/Day"
+                        emoji="🍺"
+                        colorClass="bg-amber-50 border-amber-100 text-amber-700"
+                        value={(() => {
                           if (!profileStats || !profileStats.totalPints) return "0.0";
                           const joinedStr = targetUser.joinedDate || new Date().toISOString();
                           const joinedTime = new Date(joinedStr).getTime();
@@ -409,37 +432,37 @@ export default function UserProfileManager({
                           const diffDays = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
                           return (profileStats.totalPints / diffDays).toFixed(1);
                         })()}
-                      </span>
-                    </div>
-                    <div className="bg-slate-50/50 border border-slate-200 rounded-xl p-3 flex flex-col items-center justify-center text-center shadow-inner">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Bender Days</span>
-                      <span className="text-2xl font-black text-red-500 mt-1 flex items-center gap-1 animate-pulse">
-                        🚨 {profileStats.benderCount}
-                      </span>
-                    </div>
-                    <div className="bg-slate-50/50 border border-slate-200 rounded-xl p-3 flex flex-col items-center justify-center text-center shadow-inner">
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Longest Drinking</span>
-                      <span className="text-xl font-black text-amber-600 mt-1 flex items-center gap-1">
-                        🍺 {profileStats.longestDrinkingStreak}d
-                      </span>
-                    </div>
-                    <div className="bg-slate-50/50 border border-slate-200 rounded-xl p-3 flex flex-col items-center justify-center text-center shadow-inner">
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Current Drinking</span>
-                      <span className="text-xl font-black text-emerald-600 mt-1 flex items-center gap-1">
-                        🔥 {profileStats.currentDrinkingStreak}d
-                      </span>
-                    </div>
-                    <div className="bg-slate-50/50 border border-slate-200 rounded-xl p-3 flex flex-col items-center justify-center text-center shadow-inner">
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Longest Dry</span>
-                      <span className="text-xl font-black text-sky-500 mt-1 flex items-center gap-1">
-                        🐪 {profileStats.longestDryStreak}d
-                      </span>
-                    </div>
-                    <div className="bg-slate-50/50 border border-slate-200 rounded-xl p-3 flex flex-col items-center justify-center text-center shadow-inner">
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Current Dry</span>
-                      <span className="text-xl font-black text-sky-600 mt-1 flex items-center gap-1">
-                        🌵 {profileStats.currentDryStreak}d
-                      </span>
+                      />
+                      <StatChip
+                        label="Bender Days"
+                        emoji="🚨"
+                        colorClass="bg-red-50 border-red-100 text-red-600"
+                        value={profileStats.benderCount}
+                      />
+                      <StatChip
+                        label="Longest Drink"
+                        emoji="🔥"
+                        colorClass="bg-orange-50 border-orange-100 text-orange-700"
+                        value={`${profileStats.longestDrinkingStreak}d`}
+                      />
+                      <StatChip
+                        label="Current Drink"
+                        emoji="⚡"
+                        colorClass="bg-emerald-50 border-emerald-100 text-emerald-700"
+                        value={`${profileStats.currentDrinkingStreak}d`}
+                      />
+                      <StatChip
+                        label="Longest Dry"
+                        emoji="🐪"
+                        colorClass="bg-sky-50 border-sky-100 text-sky-700"
+                        value={`${profileStats.longestDryStreak}d`}
+                      />
+                      <StatChip
+                        label="Current Dry"
+                        emoji="🌵"
+                        colorClass="bg-cyan-50 border-cyan-100 text-cyan-700"
+                        value={`${profileStats.currentDryStreak}d`}
+                      />
                     </div>
                   </div>
                 )}
@@ -452,6 +475,7 @@ export default function UserProfileManager({
                     currentUser={currentUser}
                     users={users}
                     onProfileAddedOrUpdated={onProfileAddedOrUpdated}
+                    onViewProfileRequested={onViewProfileRequested}
                   />
                 </div>
               )}

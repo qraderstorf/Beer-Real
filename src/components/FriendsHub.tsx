@@ -214,14 +214,17 @@ export default function FriendsHub({
                     key={reqUsername}
                     className="flex items-center gap-2.5 p-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl"
                   >
-                    <div className="cursor-pointer" onClick={() => onViewProfileRequested?.(reqUsername)}>
+                    <div
+                      className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer"
+                      onClick={() => onViewProfileRequested?.(reqUsername)}
+                    >
                       <UserAvatar username={reqUsername} users={users} className="w-9 h-9 text-lg" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-extrabold text-slate-800 dark:text-slate-100 truncate">
-                        {reqUser?.realName || reqUsername}
-                      </p>
-                      <p className="text-[10px] text-slate-400 truncate">@{reqUsername} wants to be friends</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-extrabold text-slate-800 dark:text-slate-100 truncate">
+                          {reqUser?.realName || reqUsername}
+                        </p>
+                        <p className="text-[10px] text-slate-400 truncate">@{reqUsername} wants to be friends</p>
+                      </div>
                     </div>
                     <button
                       onClick={() => acceptRequest(reqUsername)}
@@ -272,14 +275,17 @@ export default function FriendsHub({
                     key={u.username}
                     className="flex items-center gap-2.5 p-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl"
                   >
-                    <div className="cursor-pointer" onClick={() => onViewProfileRequested?.(u.username)}>
+                    <div
+                      className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer"
+                      onClick={() => onViewProfileRequested?.(u.username)}
+                    >
                       <UserAvatar username={u.username} users={users} className="w-9 h-9 text-lg" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-extrabold text-slate-800 dark:text-slate-100 truncate">
-                        {u.realName || u.username}
-                      </p>
-                      <p className="text-[10px] text-slate-400 truncate">@{u.username}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-extrabold text-slate-800 dark:text-slate-100 truncate">
+                          {u.realName || u.username}
+                        </p>
+                        <p className="text-[10px] text-slate-400 truncate">@{u.username}</p>
+                      </div>
                     </div>
                     <button
                       onClick={() => sendRequest(u.username)}
@@ -309,14 +315,17 @@ export default function FriendsHub({
                     key={friendUsername}
                     className="flex items-center gap-2.5 p-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl"
                   >
-                    <div className="cursor-pointer" onClick={() => onViewProfileRequested?.(friendUsername)}>
+                    <div
+                      className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer"
+                      onClick={() => onViewProfileRequested?.(friendUsername)}
+                    >
                       <UserAvatar username={friendUsername} users={users} className="w-9 h-9 text-lg" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-extrabold text-slate-800 dark:text-slate-100 truncate">
-                        {friendUser?.realName || friendUsername}
-                      </p>
-                      <p className="text-[10px] text-slate-400 truncate">@{friendUsername}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-extrabold text-slate-800 dark:text-slate-100 truncate">
+                          {friendUser?.realName || friendUsername}
+                        </p>
+                        <p className="text-[10px] text-slate-400 truncate">@{friendUsername}</p>
+                      </div>
                     </div>
                     <button
                       onClick={() => removeFriend(friendUsername)}
