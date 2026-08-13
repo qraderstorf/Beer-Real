@@ -1312,7 +1312,7 @@ export default function PubHub({
               {rallySending ? "Lighting the beacons..." : "Light the Beacons! 🔥"}
             </span>
             <span className="block text-slate-950/70 font-semibold text-[10px] sm:text-[11px] leading-tight truncate">
-              Tap to tell {activePub.name} where you're drinking tonight
+              Signal mates that pints call for aid!
             </span>
           </span>
           <ChevronRight className="w-4 h-4 text-slate-950/60 shrink-0" />
