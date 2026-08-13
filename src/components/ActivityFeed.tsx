@@ -1066,8 +1066,8 @@ export default function ActivityFeed({
 
                       return (
                         <div className="flex items-center justify-start gap-2 mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800">
-                          {/* Pre-labeled buttons & Custom emoji reactions & Plus selector */}
-                          <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                          {/* Pre-labeled buttons & Custom emoji reactions & Plus selector - single scrollable row so a full house of reactions never wraps to a second line */}
+                          <div className="flex flex-nowrap items-center gap-1.5 min-w-0 overflow-x-auto custom-scrollbar -mx-1 px-1 py-0.5">
                             {/* Preset Buttons */}
                             {presets.map((react) => {
                               const reactorList = getReactionList(log, react.key);
@@ -1075,7 +1075,7 @@ export default function ActivityFeed({
                               const count = reactorList.length;
 
                               return (
-                                <div key={react.key} className="relative group">
+                                <div key={react.key} className="relative group shrink-0">
                                   <button
                                     type="button"
                                     onClick={(e) => {
@@ -1127,7 +1127,7 @@ export default function ActivityFeed({
                             {customReactions.map(({ key, emoji, label, list }) => {
                               const hasReacted = list.includes(currentUser);
                               return (
-                                <div key={key} className="relative group">
+                                <div key={key} className="relative group shrink-0">
                                   <button
                                     type="button"
                                     onClick={(e) => {
