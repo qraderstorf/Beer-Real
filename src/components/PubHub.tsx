@@ -1216,17 +1216,6 @@ export default function PubHub({
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
-            {activePub && (
-              <button
-                type="button"
-                onClick={() => { setShowBeaconModal(true); setBeaconError(""); }}
-                disabled={rallySending}
-                title="Light the Beacons - rally your pub!"
-                className="p-1.5 bg-orange-500/15 hover:bg-orange-500/25 border border-orange-500/40 text-orange-500 rounded-xl transition-all cursor-pointer min-h-[36px] w-[36px] flex items-center justify-center shrink-0"
-              >
-                <Flame className="w-3.5 h-3.5 fill-orange-500/30" />
-              </button>
-            )}
             {activePub && !activePub.members.includes(currentUser) && (
               <button
                 onClick={() => handleJoinPub(activePub.id)}
@@ -1308,6 +1297,27 @@ export default function PubHub({
           )}
         </AnimatePresence>
       </div>
+
+      {/* Light the Beacons - compact single-row rally banner */}
+      {activePub && (
+        <button
+          type="button"
+          onClick={() => { setShowBeaconModal(true); setBeaconError(""); }}
+          disabled={rallySending}
+          className="w-full flex items-center gap-2.5 px-3.5 py-2.5 bg-gradient-to-r from-amber-500 via-orange-500 to-red-600 rounded-xl shadow-md hover:brightness-110 active:scale-[0.99] transition-all cursor-pointer text-left"
+        >
+          <Flame className="w-4 h-4 text-slate-950 shrink-0 fill-slate-950/30 animate-pulse" />
+          <span className="min-w-0 flex-1">
+            <span className="block text-slate-950 font-black text-xs sm:text-sm leading-tight">
+              {rallySending ? "Lighting the beacons..." : "Light the Beacons! 🔥"}
+            </span>
+            <span className="block text-slate-950/70 font-semibold text-[10px] sm:text-[11px] leading-tight truncate">
+              Tap to tell {activePub.name} where you're drinking tonight
+            </span>
+          </span>
+          <ChevronRight className="w-4 h-4 text-slate-950/60 shrink-0" />
+        </button>
+      )}
 
       {/* Beacon Bar Name Modal */}
       {showBeaconModal && (
