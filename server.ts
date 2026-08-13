@@ -798,14 +798,30 @@ async function getAllUsers(): Promise<UserProfile[]> {
     list = DEFAULT_USERS;
   }
 
-  // Auto-set password to 'Pints!' for any user missing it
+  // Auto-set password to 'Pints!' for any user missing it, and grandfather
+  // any pre-existing user (one with no `friends` field yet) into mutual
+  // friendship with every other pre-existing user. Users created after this
+  // migration ran get an explicit empty `friends` array at signup, so they're
+  // never swept into this backfill - they have to add friends themselves.
+  const legacyUsernames = list.filter((u) => u.friends === undefined).map((u) => u.username);
+
   let updatedUsersCount = 0;
   const migratedUsers = list.map((u) => {
-    if (!u.password) {
-      updatedUsersCount++;
-      return { ...u, password: "Pints!" };
+    let next = u;
+    let changed = false;
+    if (!next.password) {
+      next = { ...next, password: "Pints!" };
+      changed = true;
     }
-    return u;
+    if (next.friends === undefined) {
+      next = {
+        ...next,
+        friends: legacyUsernames.filter((name) => name.toLowerCase() !== u.username.toLowerCase()),
+      };
+      changed = true;
+    }
+    if (changed) updatedUsersCount++;
+    return next;
   });
 
   if (updatedUsersCount > 0 && firestore && useFirestore) {
@@ -815,9 +831,9 @@ async function getAllUsers(): Promise<UserProfile[]> {
         batch.set(doc(firestore, "users", u.username.toLowerCase()), sanitizeForFirestore(u));
       }
       await batch.commit();
-      console.log(`[Migration] Firestore updated with default user passwords.`);
+      console.log(`[Migration] Firestore updated with default passwords and grandfathered friends.`);
     } catch (err) {
-      console.error("[Migration] Failed to batch-update Firestore with default user passwords:", err);
+      console.error("[Migration] Failed to batch-update Firestore with user migration:", err);
     }
   }
 
@@ -1279,7 +1295,7 @@ interface CreateNotificationOptions {
   user: string;
   text: string;
   targetUser?: string;
-  type?: "post" | "comment" | "cheer" | "reaction" | "bender" | "invite" | "tag" | "imposter" | "beacon" | "chat";
+  type?: "post" | "comment" | "cheer" | "reaction" | "bender" | "invite" | "tag" | "imposter" | "beacon" | "chat" | "friend_request" | "friend_accept";
   date?: string;
   idPrefix?: string;
 }
@@ -2612,7 +2628,9 @@ app.post("/api/users", async (req, res) => {
     password: password || (existingUser ? (existingUser.password || "Pints!") : "Pints!"),
     realName: realName || (existingUser ? existingUser.realName : undefined),
     photoUrl: photoUrl !== undefined ? photoUrl : (existingUser ? existingUser.photoUrl : undefined),
-    email: email !== undefined ? (email.trim() || undefined) : (existingUser ? existingUser.email : undefined)
+    email: email !== undefined ? (email.trim() || undefined) : (existingUser ? existingUser.email : undefined),
+    friends: existingUser ? (existingUser.friends || []) : [],
+    friendRequests: existingUser ? (existingUser.friendRequests || []) : []
   };
 
   const isNewUser = !existingUser;
@@ -2636,6 +2654,170 @@ app.post("/api/users", async (req, res) => {
   }
 
   res.json(saved);
+});
+
+// POST Send Friend Request
+app.post("/api/friends/request", async (req, res) => {
+  const from = (req.body.from || "").toString().trim();
+  const to = (req.body.to || "").toString().trim();
+
+  if (!from || !to) {
+    res.status(400).json({ error: "Both 'from' and 'to' usernames are required." });
+    return;
+  }
+  if (from.toLowerCase() === to.toLowerCase()) {
+    res.status(400).json({ error: "You can't friend request yourself." });
+    return;
+  }
+
+  const allUsers = await getAllUsers();
+  const fromUser = allUsers.find((u) => u.username.toLowerCase() === from.toLowerCase());
+  const toUser = allUsers.find((u) => u.username.toLowerCase() === to.toLowerCase());
+
+  if (!fromUser || !toUser) {
+    res.status(404).json({ error: "User not found." });
+    return;
+  }
+
+  const fromFriends = fromUser.friends || [];
+  if (fromFriends.some((f) => f.toLowerCase() === to.toLowerCase())) {
+    res.status(400).json({ error: "You're already friends." });
+    return;
+  }
+
+  // If the other user already sent us a request, auto-accept instead of leaving two pending requests
+  const toAlreadyRequestedUs = (fromUser.friendRequests || []).some((r) => r.toLowerCase() === to.toLowerCase());
+  if (toAlreadyRequestedUs) {
+    fromUser.friends = [...fromFriends, toUser.username];
+    fromUser.friendRequests = (fromUser.friendRequests || []).filter((r) => r.toLowerCase() !== to.toLowerCase());
+    toUser.friends = [...(toUser.friends || []), fromUser.username];
+    await saveUser(fromUser);
+    await saveUser(toUser);
+    await createAndDispatchNotification({
+      idPrefix: "notif-friend-accept",
+      user: fromUser.username,
+      targetUser: toUser.username,
+      text: `is now friends with you! 🍻`,
+      type: "friend_accept",
+    });
+    res.json({ status: "friends", users: [fromUser, toUser] });
+    return;
+  }
+
+  const toRequests = toUser.friendRequests || [];
+  if (toRequests.some((r) => r.toLowerCase() === from.toLowerCase())) {
+    res.json({ status: "already_requested", users: [toUser] });
+    return;
+  }
+
+  toUser.friendRequests = [...toRequests, fromUser.username];
+  await saveUser(toUser);
+
+  await createAndDispatchNotification({
+    idPrefix: "notif-friend-request",
+    user: fromUser.username,
+    targetUser: toUser.username,
+    text: `wants to be your friend!`,
+    type: "friend_request",
+  });
+
+  res.json({ status: "requested", users: [toUser] });
+});
+
+// POST Accept Friend Request
+app.post("/api/friends/accept", async (req, res) => {
+  const user = (req.body.user || "").toString().trim();
+  const requester = (req.body.requester || "").toString().trim();
+
+  if (!user || !requester) {
+    res.status(400).json({ error: "Both 'user' and 'requester' usernames are required." });
+    return;
+  }
+
+  const allUsers = await getAllUsers();
+  const userProfile = allUsers.find((u) => u.username.toLowerCase() === user.toLowerCase());
+  const requesterProfile = allUsers.find((u) => u.username.toLowerCase() === requester.toLowerCase());
+
+  if (!userProfile || !requesterProfile) {
+    res.status(404).json({ error: "User not found." });
+    return;
+  }
+
+  const hasRequest = (userProfile.friendRequests || []).some((r) => r.toLowerCase() === requester.toLowerCase());
+  if (!hasRequest) {
+    res.status(400).json({ error: "No pending friend request from this user." });
+    return;
+  }
+
+  userProfile.friendRequests = (userProfile.friendRequests || []).filter((r) => r.toLowerCase() !== requester.toLowerCase());
+  userProfile.friends = [...(userProfile.friends || []), requesterProfile.username];
+  requesterProfile.friends = [...(requesterProfile.friends || []), userProfile.username];
+
+  await saveUser(userProfile);
+  await saveUser(requesterProfile);
+
+  await createAndDispatchNotification({
+    idPrefix: "notif-friend-accept",
+    user: userProfile.username,
+    targetUser: requesterProfile.username,
+    text: `accepted your friend request! 🍻`,
+    type: "friend_accept",
+  });
+
+  res.json({ status: "friends", users: [userProfile, requesterProfile] });
+});
+
+// POST Decline Friend Request
+app.post("/api/friends/decline", async (req, res) => {
+  const user = (req.body.user || "").toString().trim();
+  const requester = (req.body.requester || "").toString().trim();
+
+  if (!user || !requester) {
+    res.status(400).json({ error: "Both 'user' and 'requester' usernames are required." });
+    return;
+  }
+
+  const allUsers = await getAllUsers();
+  const userProfile = allUsers.find((u) => u.username.toLowerCase() === user.toLowerCase());
+  if (!userProfile) {
+    res.status(404).json({ error: "User not found." });
+    return;
+  }
+
+  userProfile.friendRequests = (userProfile.friendRequests || []).filter((r) => r.toLowerCase() !== requester.toLowerCase());
+  await saveUser(userProfile);
+
+  res.json({ status: "declined", users: [userProfile] });
+});
+
+// POST Remove Friend
+app.post("/api/friends/remove", async (req, res) => {
+  const user = (req.body.user || "").toString().trim();
+  const friend = (req.body.friend || "").toString().trim();
+
+  if (!user || !friend) {
+    res.status(400).json({ error: "Both 'user' and 'friend' usernames are required." });
+    return;
+  }
+
+  const allUsers = await getAllUsers();
+  const userProfile = allUsers.find((u) => u.username.toLowerCase() === user.toLowerCase());
+  const friendProfile = allUsers.find((u) => u.username.toLowerCase() === friend.toLowerCase());
+
+  if (!userProfile) {
+    res.status(404).json({ error: "User not found." });
+    return;
+  }
+
+  userProfile.friends = (userProfile.friends || []).filter((f) => f.toLowerCase() !== friend.toLowerCase());
+  await saveUser(userProfile);
+
+  if (friendProfile) {
+    friendProfile.friends = (friendProfile.friends || []).filter((f) => f.toLowerCase() !== user.toLowerCase());
+    await saveUser(friendProfile);
+  }
+
+  res.json({ status: "removed", users: friendProfile ? [userProfile, friendProfile] : [userProfile] });
 });
 
 // DELETE User Profile and clean up their beer logs

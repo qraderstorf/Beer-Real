@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Beer, BarChart3, Activity, Users, Compass, ChevronDown, Smile, RefreshCw, LogOut, Bell, Smartphone, Database, Cloud, Flame, ShieldAlert, Tag, MessageSquare, Heart, Sparkles } from "lucide-react";
+import { Beer, BarChart3, Activity, Users, Compass, ChevronDown, Smile, RefreshCw, LogOut, Bell, Smartphone, Database, Cloud, Flame, ShieldAlert, Tag, MessageSquare, Heart, Sparkles, UserPlus, UserCheck } from "lucide-react";
 import { BeerLog, UserProfile, AppNotification, Pub } from "./types";
 import { getMostDrankBeerForUser } from "./utils";
 import ActivityFeed from "./components/ActivityFeed";
@@ -11,6 +11,7 @@ import PubHub from "./components/PubHub";
 import QuickLogWorkflow from "./components/QuickLogWorkflow";
 import UserAvatar from "./components/UserAvatar";
 import Logo from "./components/Logo";
+import FriendsHub from "./components/FriendsHub";
 import { db, useFirestore } from "./firebase";
 import { collection, query, orderBy, limit, onSnapshot, getDocs, startAfter, where, QueryConstraint, disableNetwork } from "firebase/firestore";
 
@@ -93,6 +94,9 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<string>(() => {
     return localStorage.getItem("beer_logger_username") || "";
   });
+
+  const [showFriendsOnboarding, setShowFriendsOnboarding] = useState(false);
+  const [showFriendsModal, setShowFriendsModal] = useState(false);
 
   // Ensure selectedPubId matches an existing pub or fallback to global
   useEffect(() => {
@@ -1309,6 +1313,8 @@ export default function App() {
     (p) => (p.invited || []).map((u) => u.toLowerCase().trim()).includes(currentUser.toLowerCase().trim())
   ).length;
 
+  const pendingFriendRequestsCount = (users.find((u) => u.username === currentUser)?.friendRequests || []).length;
+
   const handleOpenNotifications = async () => {
     const opening = !showNotifsDropdown;
     setShowNotifsDropdown(opening);
@@ -1373,8 +1379,25 @@ export default function App() {
         onLoginSuccess={handleLoginSuccess}
         onProfileCreated={(newProfile) => {
           setUsers((prev) => [...prev, newProfile]);
+          setShowFriendsOnboarding(true);
         }}
       />
+    );
+  }
+
+  if (showFriendsOnboarding) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col justify-center py-10 px-4 sm:px-6">
+        <div className="sm:mx-auto sm:w-full sm:max-w-md">
+          <FriendsHub
+            currentUser={currentUser}
+            users={users}
+            onProfileAddedOrUpdated={handleProfileAddedOrUpdated}
+            isOnboarding
+            onClose={() => setShowFriendsOnboarding(false)}
+          />
+        </div>
+      </div>
     );
   }
 
@@ -1447,6 +1470,20 @@ export default function App() {
               title="Refresh logs"
             >
               <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin text-amber-500" : ""}`} />
+            </button>
+
+            {/* Friends */}
+            <button
+              onClick={() => setShowFriendsModal(true)}
+              className="relative flex items-center gap-1.5 p-1.5 sm:py-1.5 sm:px-3 rounded-xl border bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 hover:text-amber-500 hover:bg-slate-100 hover:border-slate-300 dark:hover:bg-slate-700 transition-all focus:outline-none cursor-pointer shrink-0"
+              title="Friends"
+            >
+              <UserPlus className="w-4 h-4" />
+              {pendingFriendRequestsCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-rose-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">
+                  {pendingFriendRequestsCount}
+                </span>
+              )}
             </button>
 
             {/* Notifications Bell */}
@@ -1564,6 +1601,16 @@ export default function App() {
                               typeIcon = <MessageSquare className="w-2.5 h-2.5" />;
                               badgeLabel = "Pub Chat";
                               badgeStyle = "bg-sky-50 text-sky-600 dark:bg-sky-950/40 dark:text-sky-400 border-sky-100 dark:border-sky-900/40";
+                            } else if (notif.type === "friend_request" || notif.text.includes("wants to be your friend")) {
+                              typeColorClass = "bg-violet-500 text-white shadow-violet-300/30";
+                              typeIcon = <UserPlus className="w-2.5 h-2.5" />;
+                              badgeLabel = "Friend Request";
+                              badgeStyle = "bg-violet-50 text-violet-600 dark:bg-violet-950/40 dark:text-violet-400 border-violet-100 dark:border-violet-900/40";
+                            } else if (notif.type === "friend_accept" || notif.text.includes("friend request") || notif.text.includes("now friends with you")) {
+                              typeColorClass = "bg-violet-500 text-white shadow-violet-300/30";
+                              typeIcon = <UserCheck className="w-2.5 h-2.5" />;
+                              badgeLabel = "New Friend";
+                              badgeStyle = "bg-violet-50 text-violet-600 dark:bg-violet-950/40 dark:text-violet-400 border-violet-100 dark:border-violet-900/40";
                             }
 
                              return (
@@ -1901,6 +1948,31 @@ export default function App() {
         onProfileDeleted={handleProfileDeleted}
         clientUseFirestore={clientUseFirestore}
       />
+
+      {/* Friends Modal */}
+      <AnimatePresence>
+        {showFriendsModal && (
+          <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="max-w-md w-full max-h-[85vh] overflow-y-auto custom-scrollbar"
+            >
+              <FriendsHub
+                currentUser={currentUser}
+                users={users}
+                onProfileAddedOrUpdated={handleProfileAddedOrUpdated}
+                onViewProfileRequested={(username) => {
+                  setShowFriendsModal(false);
+                  setViewingProfileUsername(username);
+                }}
+                onClose={() => setShowFriendsModal(false)}
+              />
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Quick Log Camera/Enrichment Workflow Overlay */}
       <QuickLogWorkflow

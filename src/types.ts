@@ -33,6 +33,8 @@ export interface UserProfile {
   realName?: string;
   photoUrl?: string;
   email?: string;
+  friends?: string[]; // mutual friend usernames
+  friendRequests?: string[]; // incoming pending friend request usernames
   stats?: {
     totalPints: number;
     avgRating: string;
@@ -61,7 +63,7 @@ export interface AppNotification {
   date: string;
   readBy: string[];
   targetUser?: string;
-  type?: 'post' | 'comment' | 'cheer' | 'reaction' | 'bender' | 'invite' | 'tag' | 'imposter' | 'beacon' | 'chat';
+  type?: 'post' | 'comment' | 'cheer' | 'reaction' | 'bender' | 'invite' | 'tag' | 'imposter' | 'beacon' | 'chat' | 'friend_request' | 'friend_accept';
 }
 
 export interface Pub {
