@@ -96,7 +96,6 @@ export default function App() {
   });
 
   const [showFriendsOnboarding, setShowFriendsOnboarding] = useState(false);
-  const [showFriendsModal, setShowFriendsModal] = useState(false);
 
   // Ensure selectedPubId matches an existing pub or fallback to global
   useEffect(() => {
@@ -1472,20 +1471,6 @@ export default function App() {
               <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin text-amber-500" : ""}`} />
             </button>
 
-            {/* Friends */}
-            <button
-              onClick={() => setShowFriendsModal(true)}
-              className="relative flex items-center gap-1.5 p-1.5 sm:py-1.5 sm:px-3 rounded-xl border bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 hover:text-amber-500 hover:bg-slate-100 hover:border-slate-300 dark:hover:bg-slate-700 transition-all focus:outline-none cursor-pointer shrink-0"
-              title="Friends"
-            >
-              <UserPlus className="w-4 h-4" />
-              {pendingFriendRequestsCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-rose-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">
-                  {pendingFriendRequestsCount}
-                </span>
-              )}
-            </button>
-
             {/* Notifications Bell */}
             <div className="relative" ref={notificationsRef}>
               <button
@@ -1732,10 +1717,15 @@ export default function App() {
               </div>
               <button
                 onClick={() => setIsProfileOpen(true)}
-                className="transition-all focus:outline-none hover:opacity-80 active:scale-95 shrink-0"
-                title="Switch User Profile"
+                className="relative transition-all focus:outline-none hover:opacity-80 active:scale-95 shrink-0"
+                title="My Profile & Friends"
               >
                 <UserAvatar username={currentUser} users={users} className="w-8 h-8 sm:w-9 sm:h-9 text-base sm:text-lg" />
+                {pendingFriendRequestsCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-white dark:border-slate-900">
+                    {pendingFriendRequestsCount}
+                  </span>
+                )}
               </button>
 
               <button
@@ -1948,31 +1938,6 @@ export default function App() {
         onProfileDeleted={handleProfileDeleted}
         clientUseFirestore={clientUseFirestore}
       />
-
-      {/* Friends Modal */}
-      <AnimatePresence>
-        {showFriendsModal && (
-          <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="max-w-md w-full max-h-[85vh] overflow-y-auto custom-scrollbar"
-            >
-              <FriendsHub
-                currentUser={currentUser}
-                users={users}
-                onProfileAddedOrUpdated={handleProfileAddedOrUpdated}
-                onViewProfileRequested={(username) => {
-                  setShowFriendsModal(false);
-                  setViewingProfileUsername(username);
-                }}
-                onClose={() => setShowFriendsModal(false)}
-              />
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
       {/* Quick Log Camera/Enrichment Workflow Overlay */}
       <QuickLogWorkflow

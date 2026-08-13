@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Check, Calendar, Sparkles, X, Smile, Trash2, Trophy, Flame, Award, Shield, Heart, ZoomIn, ZoomOut, Pencil } from "lucide-react";
 import { UserProfile, BeerLog, isSeymoreBeers } from "../types";
-import { getMostDrankBeerForUser, compressImage, isImposterLog } from "../utils";
+import { getMostDrankBeerForUser, compressImage } from "../utils";
 import UserAvatar from "./UserAvatar";
+import FriendsHub from "./FriendsHub";
 
 interface UserProfileManagerProps {
   users: UserProfile[];
@@ -444,166 +445,99 @@ export default function UserProfileManager({
                 )}
               </div>
 
-              {/* drinking buddies list */}
+              {/* Friends management */}
               {!isViewOnly && (
+                <div className="pt-2">
+                  <FriendsHub
+                    currentUser={currentUser}
+                    users={users}
+                    onProfileAddedOrUpdated={onProfileAddedOrUpdated}
+                  />
+                </div>
+              )}
+
+              {/* Admin-only: full user directory with delete capability */}
+              {!isViewOnly && isSeymoreBeers(currentUser) && (
                 <div className="space-y-3 pt-2">
                   <span className="block text-xs font-bold uppercase tracking-wider text-slate-400">
-                    Pub Members ({users.length})
+                    🔓 Admin: All Users ({users.length})
                   </span>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {users.map((user) => {
-                      const isActive = user.username === currentUser;
-                      
-                      // Lightweight fallback from current active memory logs for the buddies list
-                      const uLogs = logs.filter((l) => l.user.toLowerCase() === user.username.toLowerCase() && !isImposterLog(l));
-                      const bMemberStats = {
-                        totalPints: uLogs.length,
-                        benderCount: (() => {
-                          const days: Record<string, number> = {};
-                          uLogs.forEach((l) => {
-                            const day = l.date.split("T")[0];
-                            days[day] = (days[day] || 0) + 1;
-                          });
-                          return Object.values(days).filter((c) => c >= 4).length;
-                        })()
-                      };
-
-                      return (
-                        <div
-                          key={user.username}
-                          className={`p-4 rounded-xl border transition-all flex flex-col justify-between group ${
-                            isActive
-                              ? "border-amber-400 bg-amber-50/10"
-                              : "border-slate-200 bg-white hover:border-amber-300"
-                          }`}
-                        >
-                          <div className="flex items-start gap-3">
-                            <UserAvatar username={user.username} users={users} className="w-10 h-10 border border-slate-200" />
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center justify-between gap-1.5 w-full">
-                                <div className="flex items-center gap-1.5 min-w-0">
-                                  <div className="flex flex-col min-w-0">
-                                    <span className="font-extrabold text-slate-800 text-sm truncate">
-                                      {user.realName || user.username}
-                                    </span>
-                                    {user.realName && (
-                                      <span className="text-[10px] text-slate-400 font-semibold truncate leading-none mt-0.5">
-                                        @{user.username}
-                                      </span>
-                                    )}
-                                  </div>
-                                  {isActive && (
-                                    <span className="bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase shrink-0">
-                                      YOU
-                                    </span>
-                                  )}
-                                </div>
-                                
-                                {isSeymoreBeers(currentUser) && users.length > 1 ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setDeleteConfirmUser(user.username);
-                                      setConfirmInput("");
-                                    }}
-                                    className="text-slate-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-md transition-colors focus:outline-none shrink-0"
-                                    title={`Delete ${user.username}'s profile`}
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                ) : isActive ? (
-                                  <span className="text-[9px] text-amber-600 font-extrabold uppercase tracking-wider select-none shrink-0">
-                                    Active
-                                  </span>
-                                ) : null}
-                              </div>
-
-                              {/* Bio & Beer stats */}
-                              <div className="mt-1.5 space-y-1.5">
-                                <p className="text-xs text-slate-500 line-clamp-1 italic font-medium leading-relaxed">
-                                  {user.bio || "No bio added yet."}
-                                </p>
-                                <div className="flex flex-wrap gap-1">
-                                  <span className="text-[9px] text-amber-600 font-bold bg-amber-50 border border-amber-200/50 px-1.5 py-0.5 rounded">
-                                    🍺 {bMemberStats.totalPints} pint{bMemberStats.totalPints !== 1 ? "s" : ""}
-                                  </span>
-                                  <span className="text-[9px] text-red-600 font-bold bg-red-50 border border-red-200/50 px-1.5 py-0.5 rounded">
-                                    🚨 {bMemberStats.benderCount} bender{bMemberStats.benderCount !== 1 ? "s" : ""}
-                                  </span>
-                                  <span className="text-[9px] text-emerald-700 font-bold bg-emerald-50 border border-emerald-200/50 px-1.5 py-0.5 rounded">
-                                    📊 {(() => {
-                                      if (uLogs.length === 0) return "0.0";
-                                      const joinedStr = user.joinedDate || new Date().toISOString();
-                                      const joinedTime = new Date(joinedStr).getTime();
-                                      const diffMs = Date.now() - joinedTime;
-                                      const diffDays = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
-                                      return (uLogs.length / diffDays).toFixed(1);
-                                    })()}/day
-                                  </span>
-                                </div>
-                              </div>
-
-                              {/* Safe Double-Confirmation Area */}
-                              {deleteConfirmUser === user.username && (
-                                <div 
-                                  className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-xs space-y-2"
-                                >
-                                  <p className="text-red-700 font-bold">
-                                    ⚠️ Confirm Deletion
-                                  </p>
-                                  <p className="text-red-600 text-[11px] font-normal leading-relaxed">
-                                    This deletes this profile and all their logged pints permanently.
-                                  </p>
-                                  <div className="space-y-1">
-                                    <label className="text-[9px] text-red-500 font-bold uppercase block">
-                                      Type <span className="underline font-extrabold">{user.username}</span> to confirm:
-                                    </label>
-                                    <div className="flex gap-1.5">
-                                      <input
-                                        type="text"
-                                        placeholder={`Type ${user.username}`}
-                                        value={confirmInput}
-                                        onChange={(e) => setConfirmInput(e.target.value)}
-                                        className="w-full px-2 py-1 border border-red-200 rounded bg-white text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500"
-                                      />
-                                      <button
-                                        type="button"
-                                        disabled={confirmInput !== user.username}
-                                        onClick={async () => {
-                                          await onProfileDeleted(user.username);
-                                          setDeleteConfirmUser(null);
-                                          setConfirmInput("");
-                                        }}
-                                        className="px-2.5 py-1 bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white font-bold rounded cursor-pointer transition-colors text-[11px] shrink-0"
-                                      >
-                                        Delete
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setDeleteConfirmUser(null);
-                                          setConfirmInput("");
-                                        }}
-                                        className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded cursor-pointer transition-colors text-[11px] shrink-0"
-                                      >
-                                        Cancel
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {users.map((user) => (
+                      <div
+                        key={user.username}
+                        className="p-2.5 rounded-xl border border-slate-200 bg-white flex flex-col gap-2"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <UserAvatar username={user.username} users={users} className="w-8 h-8 border border-slate-200" />
+                          <div className="min-w-0 flex-1">
+                            <span className="font-extrabold text-slate-800 text-xs truncate block">
+                              {user.realName || user.username}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-semibold truncate block">@{user.username}</span>
                           </div>
-
-                          <div className="mt-3 pt-2 border-t border-slate-100 flex items-center text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                            <div className="flex items-center gap-1">
-                              <Calendar className="w-3.5 h-3.5 text-slate-300" />
-                              <span>Joined {user.joinedDate}</span>
-                            </div>
-                          </div>
+                          {users.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDeleteConfirmUser(user.username);
+                                setConfirmInput("");
+                              }}
+                              className="text-slate-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-md transition-colors focus:outline-none shrink-0"
+                              title={`Delete ${user.username}'s profile`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
-                      );
-                    })}
+
+                        {/* Safe Double-Confirmation Area */}
+                        {deleteConfirmUser === user.username && (
+                          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs space-y-2">
+                            <p className="text-red-700 font-bold">⚠️ Confirm Deletion</p>
+                            <p className="text-red-600 text-[11px] font-normal leading-relaxed">
+                              This deletes this profile and all their logged pints permanently.
+                            </p>
+                            <div className="space-y-1">
+                              <label className="text-[9px] text-red-500 font-bold uppercase block">
+                                Type <span className="underline font-extrabold">{user.username}</span> to confirm:
+                              </label>
+                              <div className="flex gap-1.5">
+                                <input
+                                  type="text"
+                                  placeholder={`Type ${user.username}`}
+                                  value={confirmInput}
+                                  onChange={(e) => setConfirmInput(e.target.value)}
+                                  className="w-full px-2 py-1 border border-red-200 rounded bg-white text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500"
+                                />
+                                <button
+                                  type="button"
+                                  disabled={confirmInput !== user.username}
+                                  onClick={async () => {
+                                    await onProfileDeleted(user.username);
+                                    setDeleteConfirmUser(null);
+                                    setConfirmInput("");
+                                  }}
+                                  className="px-2.5 py-1 bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white font-bold rounded cursor-pointer transition-colors text-[11px] shrink-0"
+                                >
+                                  Delete
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setDeleteConfirmUser(null);
+                                    setConfirmInput("");
+                                  }}
+                                  className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded cursor-pointer transition-colors text-[11px] shrink-0"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
