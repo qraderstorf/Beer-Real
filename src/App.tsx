@@ -1938,6 +1938,7 @@ export default function App() {
         onProfileDeleted={handleProfileDeleted}
         clientUseFirestore={clientUseFirestore}
         onViewProfileRequested={(username) => setViewingProfileUsername(username)}
+        onBackToMyProfile={() => setViewingProfileUsername(null)}
       />
 
       {/* Quick Log Camera/Enrichment Workflow Overlay */}

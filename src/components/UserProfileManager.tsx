@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Check, Calendar, Sparkles, X, Smile, Trash2, Trophy, Flame, Award, Shield, Heart, ZoomIn, ZoomOut, Pencil } from "lucide-react";
+import { Check, Calendar, Sparkles, X, Smile, Trash2, Trophy, Flame, Award, Shield, Heart, ZoomIn, ZoomOut, Pencil, ArrowLeft } from "lucide-react";
 import { UserProfile, BeerLog, isSeymoreBeers } from "../types";
 import { getMostDrankBeerForUser, compressImage } from "../utils";
 import UserAvatar from "./UserAvatar";
@@ -18,6 +18,7 @@ interface UserProfileManagerProps {
   viewingUsername?: string | null;
   clientUseFirestore: boolean;
   onViewProfileRequested?: (username: string) => void;
+  onBackToMyProfile?: () => void;
 }
 
 const COMMON_EMOJIS = ["🍻", "🍺", "☕", "🍋", "🍊", "🍷", "🍹", "🥂", "🥃", "🍔", "🍕", "😎", "👾", "🦊", "🐼", "🦁", "👑"];
@@ -75,7 +76,8 @@ export default function UserProfileManager({
   onClose,
   viewingUsername,
   clientUseFirestore,
-  onViewProfileRequested
+  onViewProfileRequested,
+  onBackToMyProfile
 }: UserProfileManagerProps) {
   // My Profile Edit States
   const [myRealName, setMyRealName] = useState("");
@@ -328,15 +330,25 @@ export default function UserProfileManager({
       >
         {/* Modal Header */}
         <div className="p-5 border-b border-slate-150 flex items-center justify-between bg-slate-50/50">
-          <div className="flex items-center gap-2">
-            <Trophy className="w-4 h-4 text-amber-500 animate-pulse" />
-            <h2 className="text-md font-bold text-slate-800 tracking-tight">
+          <div className="flex items-center gap-2 min-w-0">
+            {isViewOnly ? (
+              <button
+                onClick={onBackToMyProfile}
+                title="Back to my profile"
+                className="p-1 -ml-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-all focus:outline-none cursor-pointer shrink-0"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+            ) : (
+              <Trophy className="w-4 h-4 text-amber-500 animate-pulse shrink-0" />
+            )}
+            <h2 className="text-md font-bold text-slate-800 tracking-tight truncate">
               {isViewOnly ? `${targetUser.realName || targetUser.username}'s Profile` : "My Profile & Career Stats"}
             </h2>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-all focus:outline-none cursor-pointer"
+            className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-all focus:outline-none cursor-pointer shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
