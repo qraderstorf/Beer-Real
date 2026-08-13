@@ -20,10 +20,6 @@ import {
 } from "lucide-react";
 import {
   ResponsiveContainer,
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -32,7 +28,6 @@ import {
   PieChart,
   Pie,
   Cell,
-  LabelList,
   LineChart,
   Line
 } from "recharts";
@@ -337,6 +332,8 @@ export default function Statistics({
 
   const [excludedUsers, setExcludedUsers] = useState<string[]>([]);
   const [isCompareDropdownOpen, setIsCompareDropdownOpen] = useState(false);
+  const LEADERBOARD_PAGE_SIZE = 5;
+  const [leaderboardVisibleCount, setLeaderboardVisibleCount] = useState(LEADERBOARD_PAGE_SIZE);
 
   // Derive selectedUsers from filteredUsers, filteredPubLogs, and excludedUsers
   const selectedUsers = useMemo(() => {
@@ -352,6 +349,11 @@ export default function Statistics({
   useEffect(() => {
     setExcludedUsers([]);
   }, [selectedPubId]);
+
+  // Reset leaderboard pagination whenever the underlying ranking could change
+  useEffect(() => {
+    setLeaderboardVisibleCount(LEADERBOARD_PAGE_SIZE);
+  }, [selectedPubId, rangeFilter]);
 
   const [tableSearch, setTableSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("date");
@@ -770,6 +772,14 @@ export default function Statistics({
     });
   }, [selectedUsers, filteredLogs]);
 
+  // Cap the timeline chart to the top drinkers by volume - a line per person stops being
+  // readable well before you get anywhere near a full pub's worth of users.
+  const TIMELINE_MAX_LINES = 6;
+  const topGraphUsers = useMemo(
+    () => userComparisonData.slice(0, TIMELINE_MAX_LINES).map((u) => u.name),
+    [userComparisonData]
+  );
+
   // Chart 3 Data: Beer Name distribution - Guinness vs Other Beers
   const beerNameBreakdownData = useMemo(() => {
     if (filteredLogs.length === 0) return [];
@@ -1067,7 +1077,7 @@ export default function Statistics({
           <div className="py-12 text-center text-slate-400 italic">No logs within filtered period</div>
         ) : (
           <div className="space-y-3">
-            {userComparisonData.map((user, idx) => {
+            {userComparisonData.slice(0, leaderboardVisibleCount).map((user, idx) => {
               const maxPints = Math.max(...userComparisonData.map((u) => u.Pints), 1);
               const percentage = (user.Pints / maxPints) * 100;
               const userProfile = filteredUsers.find((u) => u.username === user.name);
@@ -1165,6 +1175,21 @@ export default function Statistics({
             })}
           </div>
         )}
+
+        {userComparisonData.length > leaderboardVisibleCount && (
+          <div className="flex items-center justify-center gap-3 pt-1">
+            <button
+              type="button"
+              onClick={() => setLeaderboardVisibleCount((c) => Math.min(c + LEADERBOARD_PAGE_SIZE, userComparisonData.length))}
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-extrabold rounded-lg transition-all cursor-pointer"
+            >
+              Show {Math.min(LEADERBOARD_PAGE_SIZE, userComparisonData.length - leaderboardVisibleCount)} More
+            </button>
+            <span className="text-[10px] text-slate-400 font-bold">
+              {leaderboardVisibleCount} of {userComparisonData.length}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Graphs Grid */}
@@ -1174,25 +1199,31 @@ export default function Statistics({
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-100 pb-3">
             <div>
               <h3 className="text-sm font-bold text-slate-800">A Pint in Time</h3>
-              <p className="text-[11px] text-slate-400 mt-0.5 font-normal">Cumulative pints logged over time</p>
+              <p className="text-[11px] text-slate-400 mt-0.5 font-normal">
+                Cumulative pints - top {Math.min(TIMELINE_MAX_LINES, topGraphUsers.length)}
+                {userComparisonData.length > TIMELINE_MAX_LINES ? ` of ${userComparisonData.length} drinkers` : " drinkers"}
+              </p>
             </div>
           </div>
 
-          {/* Compact Responsive Graph Key / Legend */}
-          {usersWithBeerOnGraph.length > 0 && (
+          {/* Compact Graph Key / Legend - capped to the users actually plotted */}
+          {topGraphUsers.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-slate-50/80 border border-slate-200/70 rounded-lg">
               <span className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 mr-0.5 pl-1">Key:</span>
-              {usersWithBeerOnGraph.map((user) => {
-                const index = selectedUsers.indexOf(user);
+              <div className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-800 border border-slate-700 rounded-md text-[11px] font-medium text-white shadow-2xs">
+                <span className="w-3 h-0.5 rounded-full shrink-0 bg-slate-400" />
+                <span className="font-bold">Total</span>
+              </div>
+              {topGraphUsers.map((user, index) => {
                 const color = COLORS[index % COLORS.length];
                 const userPintsCount = filteredLogs.filter(l => l.user === user).length;
                 return (
-                  <div 
-                    key={user} 
+                  <div
+                    key={user}
                     className="flex items-center gap-1.5 px-2 py-0.5 bg-white border border-slate-200/80 rounded-md text-[11px] font-medium text-slate-700 shadow-2xs"
                   >
-                    <span 
-                      className="w-2 h-2 rounded-full shrink-0" 
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0"
                       style={{ backgroundColor: color }}
                     />
                     <UserAvatar username={user} users={filteredUsers} className="w-4 h-4 text-[9px] shrink-0" />
@@ -1205,7 +1236,7 @@ export default function Statistics({
               })}
             </div>
           )}
-          
+
           <div className="h-64 text-xs font-semibold">
             {filteredLogs.length === 0 ? (
               <div className="h-full flex items-center justify-center text-slate-400 italic">No logs within filtered period</div>
@@ -1213,22 +1244,22 @@ export default function Statistics({
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={timelineChartData} margin={{ top: 15, right: 15, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={true} stroke="#e2e8f0" />
-                  <XAxis 
-                    dataKey="date" 
-                    stroke="#475569" 
+                  <XAxis
+                    dataKey="date"
+                    stroke="#475569"
                     tickLine={{ stroke: '#475569', strokeWidth: 1.5 }}
                     axisLine={{ stroke: '#94a3b8', strokeWidth: 1.5 }}
                     tick={{ fontSize: 11, fill: '#334155', fontWeight: 700 }}
                     minTickGap={15}
                   />
-                  <YAxis 
-                    allowDecimals={false} 
-                    stroke="#475569" 
+                  <YAxis
+                    allowDecimals={false}
+                    stroke="#475569"
                     tickLine={{ stroke: '#475569', strokeWidth: 1.5 }}
                     axisLine={{ stroke: '#94a3b8', strokeWidth: 1.5 }}
                     tick={{ fontSize: 11, fill: '#334155', fontWeight: 700 }}
                   />
-                  <Tooltip 
+                  <Tooltip
                     formatter={(val: any, name: any) => {
                       const rounded = Math.round(Number(val));
                       return [`${rounded} ${rounded === 1 ? 'pint' : 'pints'}`, name];
@@ -1236,21 +1267,28 @@ export default function Statistics({
                     contentStyle={{ backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)' }}
                     labelStyle={{ fontWeight: 'bold', color: '#1e293b' }}
                   />
-                  {usersWithBeerOnGraph.map((user) => {
-                    const index = selectedUsers.indexOf(user);
-                    return (
-                      <Line
-                        key={user}
-                        type="monotone"
-                        dataKey={user}
-                        stroke={COLORS[index % COLORS.length]}
-                        strokeWidth={2.5}
-                        dot={false}
-                        activeDot={{ r: 5 }}
-                        name={`${user}'s Pints`}
-                      />
-                    );
-                  })}
+                  <Line
+                    type="monotone"
+                    dataKey="Total"
+                    stroke="#94a3b8"
+                    strokeWidth={2}
+                    strokeDasharray="5 4"
+                    dot={false}
+                    activeDot={{ r: 4 }}
+                    name="Community Total"
+                  />
+                  {topGraphUsers.map((user, index) => (
+                    <Line
+                      key={user}
+                      type="monotone"
+                      dataKey={user}
+                      stroke={COLORS[index % COLORS.length]}
+                      strokeWidth={2.5}
+                      dot={false}
+                      activeDot={{ r: 5 }}
+                      name={`${user}'s Pints`}
+                    />
+                  ))}
                 </LineChart>
               </ResponsiveContainer>
             )}
