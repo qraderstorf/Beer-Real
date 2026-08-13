@@ -1074,9 +1074,9 @@ export default function PubHub({
   // RENDER UNIFIED PUB PAGE VIEW
   // ===========================================================================
   return (
-    <div className="space-y-4 animate-in fade-in duration-200">
+    <div className="space-y-3 animate-in fade-in duration-200">
       {/* Top Pub Navigation & Toggle Header Bar */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 sm:p-4 shadow-2xs space-y-3">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-2.5 sm:p-3.5 shadow-2xs space-y-2.5">
         {/* Top selector and quick tools */}
         <div className="flex flex-wrap items-center justify-between gap-2">
           {/* Left: Dropdown Pub Selector + Pin */}
@@ -1215,14 +1215,27 @@ export default function PubHub({
             </div>
           </div>
 
-          {activePub && !activePub.members.includes(currentUser) && (
-            <button
-              onClick={() => handleJoinPub(activePub.id)}
-              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-xs flex items-center gap-1 shrink-0"
-            >
-              <UserPlus className="w-3.5 h-3.5" /> Join
-            </button>
-          )}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {activePub && (
+              <button
+                type="button"
+                onClick={() => { setShowBeaconModal(true); setBeaconError(""); }}
+                disabled={rallySending}
+                title="Light the Beacons - rally your pub!"
+                className="p-1.5 bg-orange-500/15 hover:bg-orange-500/25 border border-orange-500/40 text-orange-500 rounded-xl transition-all cursor-pointer min-h-[36px] w-[36px] flex items-center justify-center shrink-0"
+              >
+                <Flame className="w-3.5 h-3.5 fill-orange-500/30" />
+              </button>
+            )}
+            {activePub && !activePub.members.includes(currentUser) && (
+              <button
+                onClick={() => handleJoinPub(activePub.id)}
+                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-xs flex items-center gap-1 shrink-0"
+              >
+                <UserPlus className="w-3.5 h-3.5" /> Join
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Expandable Roster & Invites Drawer */}
@@ -1294,36 +1307,6 @@ export default function PubHub({
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
-
-      {/* Squad Beacon Station Bar - Mobile & Desktop Responsive */}
-      <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-amber-950/40 border-2 border-orange-500/40 rounded-2xl p-3 sm:p-4 shadow-lg relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="p-2 bg-orange-500/15 border border-orange-500/40 rounded-xl text-orange-400 shrink-0">
-            <Flame className="w-5 h-5 text-orange-500 fill-orange-500/30 animate-pulse" />
-          </div>
-          <div className="min-w-0">
-            <h3 className="text-xs sm:text-sm font-black text-slate-100 flex items-center gap-1.5 leading-snug">
-              Light the Beacons! 🔥
-            </h3>
-            <p className="text-[10px] sm:text-[11px] text-slate-300 leading-tight">
-              Signal mates that pints call for aid!
-            </p>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => {
-            setShowBeaconModal(true);
-            setBeaconError("");
-          }}
-          disabled={rallySending}
-          className="w-full sm:w-auto px-4 py-2.5 sm:py-2 bg-gradient-to-r from-amber-500 via-orange-500 to-red-600 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-md hover:brightness-110 active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
-        >
-          <Flame className="w-4 h-4 fill-slate-950/40 shrink-0" />
-          <span>{rallySending ? "Lighting..." : "Light Beacon! 🔥"}</span>
-        </button>
       </div>
 
       {/* Beacon Bar Name Modal */}
