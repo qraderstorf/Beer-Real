@@ -718,20 +718,6 @@ export default function QuickLogWorkflow({
                   </div>
                 </div>
 
-                {/* Dart combo / Cig option */}
-                <div className="flex items-center justify-between p-3.5 bg-amber-500/5 border border-amber-500/10 rounded-xl">
-                  <div className="flex flex-col">
-                    <span className="text-xs font-extrabold text-amber-600 dark:text-amber-400">🚬 Dart Combo Activated?</span>
-                    <span className="text-[9px] text-slate-400 mt-0.5">Did you smoke a cigarette/vape with this pint?</span>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={hadCig}
-                    onChange={(e) => setHadCig(e.target.checked)}
-                    className="w-4.5 h-4.5 accent-amber-500 rounded cursor-pointer"
-                  />
-                </div>
-
                 {/* Action buttons (Skip vs Save) */}
                 <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center gap-3">
                   {/* Skip Option */}

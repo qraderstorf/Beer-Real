@@ -922,59 +922,27 @@ async function recalculateAndCacheUserStats(username: string): Promise<any> {
   );
   const timeZone = (existingUser && (existingUser as any).timezone) || "America/Los_Angeles";
 
-  const benderDays: Record<string, number> = {};
-  userLogs.forEach((l) => {
-    const day = getLocalDateString(l.date, timeZone);
-    benderDays[day] = (benderDays[day] || 0) + 1;
-  });
-  const benderCount = Object.values(benderDays).filter((count) => count >= 4).length;
+  // Positive stats: variety and exploration rather than drinking frequency.
+  const stylesTried = Object.keys(styleCounts).length;
+  const pubsVisited = new Set(userLogs.map((l) => l.pubId).filter(Boolean)).size;
+  const firstPourCount = userLogs.filter((l) => l.isFirstOfDay).length;
 
-  // Streak calculations
+  // Dry-streak calculations only - no "drinking streak" is tracked or surfaced,
+  // since rewarding consecutive days of drinking is exactly the kind of pattern
+  // that encourages excessive/habitual alcohol use.
   const loggedLocalDates = userLogs.map((l) => getLocalDateString(l.date, timeZone));
   const uniqueDates = Array.from(new Set(loggedLocalDates)).sort();
 
-  let longestDrinkingStreak = 0;
   let longestDryStreak = 0;
-  let currentDrinkingStreak = 0;
   let currentDryStreak = 0;
 
   if (uniqueDates.length > 0) {
-    // 1. Longest Drinking Streak
-    let tempDrinkingStreak = 1;
-    for (let i = 1; i < uniqueDates.length; i++) {
-      const diff = getDayDifference(uniqueDates[i - 1], uniqueDates[i]);
-      if (diff === 1) {
-        tempDrinkingStreak++;
-      } else if (diff > 1) {
-        if (tempDrinkingStreak > longestDrinkingStreak) {
-          longestDrinkingStreak = tempDrinkingStreak;
-        }
-        tempDrinkingStreak = 1;
-      }
-    }
-    if (tempDrinkingStreak > longestDrinkingStreak) {
-      longestDrinkingStreak = tempDrinkingStreak;
-    }
-
-    // 2. Today Status
+    // 1. Today Status
     const todayStr = getLocalDateString(new Date(), timeZone);
     const hasLogToday = uniqueDates.includes(todayStr);
 
-    // 3. Current Drinking / Dry Streak (Mutually Exclusive)
-    if (hasLogToday) {
-      currentDryStreak = 0;
-      let checkDate = new Date(todayStr + "T12:00:00");
-      while (true) {
-        const checkDateStr = getLocalDateString(checkDate, timeZone);
-        if (uniqueDates.includes(checkDateStr)) {
-          currentDrinkingStreak++;
-          checkDate.setDate(checkDate.getDate() - 1);
-        } else {
-          break;
-        }
-      }
-    } else {
-      currentDrinkingStreak = 0;
+    // 2. Current Dry Streak (0 if they've already logged today)
+    if (!hasLogToday) {
       let checkDate = new Date(todayStr + "T12:00:00");
       while (true) {
         const checkDateStr = getLocalDateString(checkDate, timeZone);
@@ -987,7 +955,7 @@ async function recalculateAndCacheUserStats(username: string): Promise<any> {
       }
     }
 
-    // 4. Longest Dry Streak
+    // 3. Longest Dry Streak
     if (uniqueDates.length > 1) {
       for (let i = 1; i < uniqueDates.length; i++) {
         const diff = getDayDifference(uniqueDates[i - 1], uniqueDates[i]);
@@ -1007,10 +975,10 @@ async function recalculateAndCacheUserStats(username: string): Promise<any> {
     avgRating,
     favoriteStyle,
     totalCheers,
-    benderCount,
-    longestDrinkingStreak,
+    stylesTried,
+    pubsVisited,
+    firstPourCount,
     longestDryStreak,
-    currentDrinkingStreak,
     currentDryStreak
   };
 
@@ -1190,9 +1158,8 @@ function isGuinnessBeerName(name: string | undefined | null): boolean {
   return name.trim().toLowerCase().includes("guinness");
 }
 
-function generateCreativeBeerNotificationText(beerName: string, abv: number, dateStr: string, hadCig: boolean, todayCount: number): string {
+function generateCreativeBeerNotificationText(beerName: string, abv: number, dateStr: string, todayCount: number): string {
   const isGuinness = isGuinnessBeerName(beerName);
-  const cigSfx = hadCig ? " 🚬" : "";
 
   // Get hour from ISO date string
   let hour = 17; // default
@@ -1206,10 +1173,10 @@ function generateCreativeBeerNotificationText(beerName: string, abv: number, dat
   // SPECIAL GUINNESS NOTIFICATION
   if (isGuinness) {
     const guinnessOptions = [
-      `is pouring a majestic black pint of Guinness! 🖤🇮🇪🍺 Sláinte!${cigSfx}`,
-      `is settling a smooth, creamy pint of Guinness! 🇮🇪🍺 Good things come to those who wait!${cigSfx}`,
-      `just poured the dark stuff: a lovely pint of Guinness! 🖤🍻 Sláinte!${cigSfx}`,
-      `is enjoying a perfectly settled velvet pint of Guinness! 🖤🍺 Sláinte!${cigSfx}`
+      `is pouring a majestic black pint of Guinness! 🖤🇮🇪🍺 Sláinte!`,
+      `is settling a smooth, creamy pint of Guinness! 🇮🇪🍺 Good things come to those who wait!`,
+      `just poured the dark stuff: a lovely pint of Guinness! 🖤🍻 Sláinte!`,
+      `is enjoying a perfectly settled velvet pint of Guinness! 🖤🍺 Sláinte!`
     ];
     return guinnessOptions[Math.floor(Math.random() * guinnessOptions.length)];
   }
@@ -1217,10 +1184,10 @@ function generateCreativeBeerNotificationText(beerName: string, abv: number, dat
   // 1st of the day!
   if (todayCount === 1) {
     const options = [
-      `is kickstarting their day with a cold <strong>1st pint</strong>! 🌅🍺${cigSfx}`,
-      `is opening the floodgates with their <strong>first pint of the day</strong>! 🔓🍻${cigSfx}`,
-      `is wetting their whistle with the debut pint of the day! 🎨🍺${cigSfx}`,
-      `is officially in play with their <strong>1st pint</strong>! 🚩🍻${cigSfx}`
+      `is kickstarting their day with a cold <strong>1st pint</strong>! 🌅🍺`,
+      `is opening the floodgates with their <strong>first pint of the day</strong>! 🔓🍻`,
+      `is wetting their whistle with the debut pint of the day! 🎨🍺`,
+      `is officially in play with their <strong>1st pint</strong>! 🚩🍻`
     ];
     return options[Math.floor(Math.random() * options.length)];
   }
@@ -1228,9 +1195,9 @@ function generateCreativeBeerNotificationText(beerName: string, abv: number, dat
   // Early morning (before 11 AM)
   if (hour < 11) {
     const options = [
-      `is starting shockingly early with a morning pint! 🌅👀${cigSfx}`,
-      `believes it's five o'clock somewhere! Breakfast pint! 🍳🍺${cigSfx}`,
-      `is beating the sun with an early doors pint! 🐓🍻${cigSfx}`
+      `is starting shockingly early with a morning pint! 🌅👀`,
+      `believes it's five o'clock somewhere! Breakfast pint! 🍳🍺`,
+      `is beating the sun with an early doors pint! 🐓🍻`
     ];
     return options[Math.floor(Math.random() * options.length)];
   }
@@ -1238,9 +1205,9 @@ function generateCreativeBeerNotificationText(beerName: string, abv: number, dat
   // High ABV (>= 8%)
   if (abv >= 8) {
     const options = [
-      `is playing with fire! Sinking a heavy pint (${abv}% ABV)! 🔥🥴${cigSfx}`,
-      `is tackling an absolute unit of a pint at ${abv}% ABV! 🥊🍺${cigSfx}`,
-      `is cruising in the fast lane with a strong pint (${abv}%)! 🚀🍻${cigSfx}`
+      `is playing with fire! Sinking a heavy pint (${abv}% ABV)! 🔥🥴`,
+      `is tackling an absolute unit of a pint at ${abv}% ABV! 🥊🍺`,
+      `is cruising in the fast lane with a strong pint (${abv}%)! 🚀🍻`
     ];
     return options[Math.floor(Math.random() * options.length)];
   }
@@ -1248,8 +1215,8 @@ function generateCreativeBeerNotificationText(beerName: string, abv: number, dat
   // Low ABV (<= 0.5% and > 0)
   if (abv <= 0.5 && abv > 0) {
     const options = [
-      `is staying responsible with a sober-safe pint (${abv}% ABV)! 😇🌱${cigSfx}`,
-      `is pacing themselves with a clear-headed pint (${abv}%)! 🧠🍻${cigSfx}`
+      `is staying responsible with a sober-safe pint (${abv}% ABV)! 😇🌱`,
+      `is pacing themselves with a clear-headed pint (${abv}%)! 🧠🍻`
     ];
     return options[Math.floor(Math.random() * options.length)];
   }
@@ -1257,9 +1224,9 @@ function generateCreativeBeerNotificationText(beerName: string, abv: number, dat
   // Lunch pint (between 12 PM and 2 PM, i.e. 12 and 13)
   if (hour >= 12 && hour < 14) {
     const options = [
-      `is enjoying a sneaky lunch pint! Shhh... 🤫🍔🍺${cigSfx}`,
-      `is taking a very productive 'working lunch' with a cold pint! 💼🍻${cigSfx}`,
-      `is supplementing their diet with a liquid lunch! 🥗🍺${cigSfx}`
+      `is enjoying a sneaky lunch pint! Shhh... 🤫🍔🍺`,
+      `is taking a very productive 'working lunch' with a cold pint! 💼🍻`,
+      `is supplementing their diet with a liquid lunch! 🥗🍺`
     ];
     return options[Math.floor(Math.random() * options.length)];
   }
@@ -1267,25 +1234,25 @@ function generateCreativeBeerNotificationText(beerName: string, abv: number, dat
   // Late Night (after 11 PM or before 4 AM)
   if (hour >= 23 || hour < 4) {
     const options = [
-      `is howling at the moon with a late-night pint! 🌕🐺${cigSfx}`,
-      `is refusing to let the night end! Sinking a midnight pint! 🦉🍻${cigSfx}`,
-      `is burning the midnight oil with a dark-hours pint! 🕯️🍺${cigSfx}`
+      `is howling at the moon with a late-night pint! 🌕🐺`,
+      `is refusing to let the night end! Sinking a midnight pint! 🦉🍻`,
+      `is burning the midnight oil with a dark-hours pint! 🕯️🍺`
     ];
     return options[Math.floor(Math.random() * options.length)];
   }
 
   // Standard but creative notifications for general logs
   const generalOptions = [
-    `is sinking a crisp pint! 🍺${cigSfx}`,
-    `is wetting their whistle with a lovely pint! 🍻${cigSfx}`,
-    `just poured a cold one! Down the hatch! ✨🍺${cigSfx}`,
-    `is absolutely demolishing a cold pint! 🦖🍻${cigSfx}`,
-    `is taking a big pull! Down the hatch! 🌊🍺${cigSfx}`,
-    `is treating themselves to a well-earned pint! 🎯🍻${cigSfx}`,
-    `is enjoying the nectar of the gods! 🍯🍺${cigSfx}`,
-    `is keeping the good times rolling with a cold pint! 🔄🍻${cigSfx}`,
-    `is having some quality pub chat over a cold pint! 🗣️🍺${cigSfx}`,
-    `is sinking a majestic pint! 🏰🍺${cigSfx}`
+    `is sinking a crisp pint! 🍺`,
+    `is wetting their whistle with a lovely pint! 🍻`,
+    `just poured a cold one! Down the hatch! ✨🍺`,
+    `is absolutely demolishing a cold pint! 🦖🍻`,
+    `is taking a big pull! Down the hatch! 🌊🍺`,
+    `is treating themselves to a well-earned pint! 🎯🍻`,
+    `is enjoying the nectar of the gods! 🍯🍺`,
+    `is keeping the good times rolling with a cold pint! 🔄🍻`,
+    `is having some quality pub chat over a cold pint! 🗣️🍺`,
+    `is sinking a majestic pint! 🏰🍺`
   ];
   return generalOptions[Math.floor(Math.random() * generalOptions.length)];
 }
@@ -1312,7 +1279,7 @@ interface CreateNotificationOptions {
   user: string;
   text: string;
   targetUser?: string;
-  type?: "post" | "comment" | "cheer" | "reaction" | "bender" | "invite" | "tag" | "imposter" | "beacon" | "chat" | "friend_request" | "friend_accept";
+  type?: "post" | "comment" | "cheer" | "reaction" | "bender" | "first_pour" | "invite" | "tag" | "imposter" | "beacon" | "chat" | "friend_request" | "friend_accept";
   date?: string;
   idPrefix?: string;
 }
@@ -2198,7 +2165,6 @@ app.post("/api/beers", async (req, res) => {
             saved.beerName,
             Number(saved.abv),
             saved.date,
-            !!saved.hadCig,
             userLogsToday.length
           );
 
@@ -2228,14 +2194,35 @@ app.post("/api/beers", async (req, res) => {
           }
         }
 
-        // 2. Only send global bender alert ONCE when they hit 4 beers in a single day
-        if (userLogsToday.length === 4) {
+        // 2. First Pour of the Day - whoever is first (across ALL users) to check
+        // in each calendar day gets a fun, positive callout. Unlike the old
+        // "bender alert" this rewards being early, not drinking a lot.
+        const otherLogsSameDay = allBeersList.filter(
+          (l) => l.id !== saved.id && l.date.split("T")[0] === checkInDateStr
+        );
+        const isFirstOfDay = otherLogsSameDay.every(
+          (l) => new Date(l.date).getTime() >= new Date(saved.date).getTime()
+        );
+
+        // 3. New Style Unlocked - first time this user has logged this beer style.
+        const priorStyleLogs = allBeersList.filter(
+          (l) => l.id !== saved.id &&
+            l.user === saved.user &&
+            (l.beerStyle || "").toLowerCase() === (saved.beerStyle || "").toLowerCase()
+        );
+        const isNewStyle = priorStyleLogs.length === 0;
+
+        if (isFirstOfDay || isNewStyle) {
+          await saveBeerLog({ ...saved, isFirstOfDay, isNewStyle });
+        }
+
+        if (isFirstOfDay) {
           await createAndDispatchNotification({
-            idPrefix: `notif-bender-4`,
+            idPrefix: "notif-first-pour",
             user: saved.user,
-            text: `🚨 BENDER ALERT! <strong>${saved.user}</strong> is on a bender! Logged pint #4 today! 🥴🔥🍻`,
+            text: `🌅 <strong>${saved.user}</strong> poured the first pint of the day! Who's next?`,
             date: saved.date,
-            type: "bender",
+            type: "first_pour",
           });
         }
       } catch (err) {

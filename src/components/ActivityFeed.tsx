@@ -198,7 +198,7 @@ const CUSTOM_EMOJIS = [
   { emoji: "😎", label: "Smooth" },
   { emoji: "🤔", label: "Dodgy" },
   { emoji: "😮", label: "Gasp" },
-  { emoji: "😴", label: "PassedOut" },
+  { emoji: "🎯", label: "Nailed It" },
   { emoji: "🍕", label: "SoberUp" },
   { emoji: "🍔", label: "PubGrub" },
   { emoji: "🍟", label: "Chips" },
@@ -703,68 +703,6 @@ export default function ActivityFeed({
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto" id="activity-feed-view">
-      <style>{`
-        @keyframes drunkSway {
-          0%, 100% { transform: translate(0px, 0px) rotate(0deg); filter: blur(0px); }
-          10% { transform: translate(-0.25px, 0.15px) rotate(-0.04deg); filter: blur(0.1px); }
-          20% { transform: translate(0.2px, -0.2px) rotate(0.03deg); filter: blur(0.05px); }
-          30% { transform: translate(-0.15px, -0.15px) rotate(-0.05deg); filter: blur(0.25px); }
-          40% { transform: translate(0.25px, 0.15px) rotate(0.04deg); filter: blur(0.1px); }
-          50% { transform: translate(-0.1px, -0.3px) rotate(-0.02deg); filter: blur(0.35px); }
-          60% { transform: translate(0.2px, 0.15px) rotate(0.05deg); filter: blur(0.2px); }
-          70% { transform: translate(-0.2px, -0.08px) rotate(-0.04deg); filter: blur(0.08px); }
-          80% { transform: translate(0.25px, -0.2px) rotate(0.06deg); filter: blur(0.3px); }
-          90% { transform: translate(-0.15px, 0.25px) rotate(-0.03deg); filter: blur(0.1px); }
-        }
-        @keyframes photoBlurSway {
-          0%, 100% { transform: scale(1) translate(0px, 0px) rotate(0deg); filter: blur(0px); }
-          20% { transform: scale(1.0015) translate(-0.2px, 0.15px) rotate(-0.02deg); filter: blur(0.2px); }
-          40% { transform: scale(0.999) translate(0.18px, -0.18px) rotate(0.02deg); filter: blur(0.4px); }
-          60% { transform: scale(1.001) translate(-0.12px, -0.1px) rotate(-0.01deg); filter: blur(0.15px); }
-          80% { transform: scale(1.0005) translate(0.2px, -0.12px) rotate(0.03deg); filter: blur(0.35px); }
-        }
-        @keyframes benderSirenAlert {
-          0%, 100% {
-            border-color: #ef4444;
-            box-shadow: 0 0 15px rgba(239, 68, 68, 0.45), inset 0 0 8px rgba(239, 68, 68, 0.15);
-          }
-          50% {
-            border-color: #f97316;
-            box-shadow: 0 0 25px rgba(249, 115, 22, 0.65), inset 0 0 12px rgba(249, 115, 22, 0.25);
-          }
-        }
-        @keyframes strobeLight {
-          0%, 100% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-        }
-        @keyframes sirenAmbient {
-          0%, 100% {
-            background-image: radial-gradient(circle at 15% 25%, rgba(239, 68, 68, 0.28) 0%, transparent 65%),
-                              radial-gradient(circle at 85% 75%, rgba(245, 158, 11, 0.15) 0%, transparent 65%);
-          }
-          50% {
-            background-image: radial-gradient(circle at 15% 25%, rgba(245, 158, 11, 0.25) 0%, transparent 65%),
-                              radial-gradient(circle at 85% 75%, rgba(239, 68, 68, 0.15) 0%, transparent 65%);
-          }
-        }
-        .animate-drunk-sway {
-          animation: drunkSway 3.5s ease-in-out infinite;
-        }
-        .animate-bender-combined {
-          animation: drunkSway 2.8s ease-in-out infinite, benderSirenAlert 1.5s ease-in-out infinite;
-        }
-        .animate-photo-bender {
-          animation: photoBlurSway 3.6s ease-in-out infinite;
-        }
-        .animate-strobe {
-          background-size: 200% auto;
-          animation: strobeLight 0.8s linear infinite;
-        }
-        .animate-siren-ambient {
-          animation: sirenAmbient 2.0s ease-in-out infinite;
-        }
-      `}</style>
-      
       {/* Quick Log Pint CTA Banner - Sticky on scroll */}
       <div className="sticky top-[calc(3.5rem+env(safe-area-inset-top,0px))] sm:top-[calc(4rem+env(safe-area-inset-top,0px))] z-30 -mt-6 pt-2 pb-2 bg-slate-50 dark:bg-slate-950 transition-all">
         <div className="bg-gradient-to-r from-amber-500 via-amber-600 to-orange-500 rounded-xl p-2.5 sm:p-3.5 shadow-md border border-amber-600/10 flex flex-row items-center justify-between gap-2.5">
@@ -881,18 +819,7 @@ export default function ActivityFeed({
             uniqueFilteredLogs.map((log) => {
               const hasCheered = log.cheers.includes(currentUser);
               const isDenied = getReactionList(log, "dislike").length >= 3;
-              
-              // Calculate if this user is on a bender (4+ pints logged on the same calendar day)
-              // and ensure ONLY the 4th beer and subsequent beers of that day show the bender alert
-              const checkInDateStr = log.date.split("T")[0];
-              const logsTodayForUser = logs.filter(
-                (l) => l.user === log.user && l.date.split("T")[0] === checkInDateStr
-              );
-              const sortedLogsToday = [...logsTodayForUser].sort(
-                (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-              );
-              const logIndex = sortedLogsToday.findIndex((l) => l.id === log.id);
-              const isOnBender = logsTodayForUser.length >= 4 && logIndex >= 3;
+              const isCelebrated = (log.isFirstOfDay || log.isNewStyle) && !isDenied;
 
               return (
                 <motion.div
@@ -905,8 +832,8 @@ export default function ActivityFeed({
                   className={`bg-white dark:bg-slate-900 rounded-xl border overflow-hidden transition-all shadow-sm relative ${
                     isDenied
                       ? "border-red-600 dark:border-red-800 shadow-[inset_0_0_20px_rgba(220,38,38,0.08)] bg-red-50/5"
-                      : isOnBender
-                        ? "border-amber-400/80 dark:border-amber-500/50 shadow-sm ring-1 ring-amber-500/20 animate-drunk-sway"
+                      : isCelebrated
+                        ? "border-amber-400/80 dark:border-amber-500/50 shadow-sm ring-1 ring-amber-500/20"
                         : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
                   }`}
                 >
@@ -940,12 +867,20 @@ export default function ActivityFeed({
                           {log.rating === 5 && (
                             <Award className="w-3.5 h-3.5 text-amber-500 fill-amber-500" title="Elite rating!" />
                           )}
-                          {isOnBender && !isDenied && (
-                            <span 
+                          {log.isFirstOfDay && !isDenied && (
+                            <span
                               className="bg-amber-500/10 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 font-extrabold px-2 py-0.5 rounded-full text-[9px] uppercase tracking-wider inline-flex items-center gap-1 border border-amber-300 dark:border-amber-700/60 shadow-xs"
-                              title={`${log.user} is on a bender (4+ pints logged today)!`}
+                              title={`${log.user} poured the first pint of the day!`}
                             >
-                              🚨 Bender Alert
+                              🌅 First Pour
+                            </span>
+                          )}
+                          {log.isNewStyle && !isDenied && (
+                            <span
+                              className="bg-emerald-500/10 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 font-extrabold px-2 py-0.5 rounded-full text-[9px] uppercase tracking-wider inline-flex items-center gap-1 border border-emerald-300 dark:border-emerald-700/60 shadow-xs"
+                              title={`${log.user}'s first time logging a ${log.beerStyle}!`}
+                            >
+                              🆕 New Style
                             </span>
                           )}
                         </div>
@@ -954,8 +889,8 @@ export default function ActivityFeed({
                             {formatBeerDateWithTime(log.date)}
                           </p>
                           {isAfterMidnight(log.date) && (
-                            <span className="bg-violet-500/10 text-violet-600 dark:text-violet-400 font-black px-1.5 py-0.5 rounded text-[8px] uppercase tracking-widest border border-violet-500/20 animate-pulse">
-                              🌙 Gremlin Hour
+                            <span className="bg-violet-500/10 text-violet-600 dark:text-violet-400 font-black px-1.5 py-0.5 rounded text-[8px] uppercase tracking-widest border border-violet-500/20">
+                              🦉 Night Owl
                             </span>
                           )}
                         </div>
@@ -1068,11 +1003,6 @@ export default function ActivityFeed({
                                   {log.abv.toFixed(1)}% ABV
                                 </span>
                               )}
-                              {log.hadCig && (
-                                <span className="bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25 px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase animate-pulse flex items-center gap-1" title="Yes, they smoked a dart with this pint. Absolute beast mode.">
-                                  🚬 Dart Combo Activated
-                                </span>
-                              )}
                             </div>
                           </>
                         ) : (
@@ -1080,11 +1010,6 @@ export default function ActivityFeed({
                             {log.abv > 0 && (
                               <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase">
                                 {log.abv.toFixed(1)}% ABV
-                              </span>
-                            )}
-                            {log.hadCig && (
-                              <span className="bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25 px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase animate-pulse flex items-center gap-1" title="Yes, they smoked a dart with this pint. Absolute beast mode.">
-                                  🚬 Dart Combo Activated
                               </span>
                             )}
                           </div>
@@ -1114,9 +1039,7 @@ export default function ActivityFeed({
                         <img
                           src={log.imageUrl}
                           alt={`${log.beerName} by ${log.user}`}
-                          className={`object-cover max-h-80 w-full hover:scale-[1.01] transition-all duration-300 ${
-                            isOnBender ? "animate-photo-bender" : ""
-                          }`}
+                          className="object-cover max-h-80 w-full hover:scale-[1.01] transition-all duration-300"
                           referrerPolicy="no-referrer"
                         />
                       </div>

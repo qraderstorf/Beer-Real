@@ -1324,10 +1324,10 @@ export default function App() {
     }
     
     // Otherwise, handle legacy notifications or general notifications:
-    const isPostOrBenderOrImposter = n.type === "post" || n.type === "bender" || n.type === "imposter" ||
-      n.text.includes("logged a pint") || n.text.includes("BENDER ALERT") || n.text.includes("IMPOSTER PINT") ||
+    const isPostOrBenderOrImposter = n.type === "post" || n.type === "bender" || n.type === "first_pour" || n.type === "imposter" ||
+      n.text.includes("logged a pint") || n.text.includes("BENDER ALERT") || n.text.includes("first pint of the day") || n.text.includes("IMPOSTER PINT") ||
       n.text.includes("is sinking") || n.text.includes("is pouring") || n.text.includes("is enjoying") || n.text.includes("is howling");
-      
+
     if (isPostOrBenderOrImposter) {
       // General post notifications from other users
       return true;
@@ -1607,6 +1607,11 @@ export default function App() {
                               typeIcon = <Flame className="w-2.5 h-2.5" />;
                               badgeLabel = "Bender";
                               badgeStyle = "bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400 border-red-100 dark:border-red-900/40";
+                            } else if (notif.type === "first_pour" || notif.text.includes("first pint of the day")) {
+                              typeColorClass = "bg-amber-500 text-white shadow-amber-300/30";
+                              typeIcon = <Sparkles className="w-2.5 h-2.5" />;
+                              badgeLabel = "First Pour";
+                              badgeStyle = "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 border-amber-100 dark:border-amber-900/40";
                             } else if (notif.type === "comment" || notif.text.includes("commented on")) {
                               typeColorClass = "bg-indigo-500 text-white shadow-indigo-300/30";
                               typeIcon = <MessageSquare className="w-2.5 h-2.5" />;

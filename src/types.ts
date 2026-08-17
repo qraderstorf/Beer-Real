@@ -21,6 +21,8 @@ export interface BeerLog {
   reactions?: Record<string, string[]>;
   hadCig?: boolean;
   pubId?: string;
+  isFirstOfDay?: boolean; // first pint logged by anyone, that calendar day
+  isNewStyle?: boolean; // first time this user has logged this beerStyle
 }
 
 export interface UserProfile {
@@ -41,10 +43,10 @@ export interface UserProfile {
     avgRating: string;
     favoriteStyle: string;
     totalCheers: number;
-    benderCount: number;
-    longestDrinkingStreak: number;
+    stylesTried: number;
+    pubsVisited: number;
+    firstPourCount: number;
     longestDryStreak: number;
-    currentDrinkingStreak: number;
     currentDryStreak: number;
   };
 }
@@ -64,7 +66,7 @@ export interface AppNotification {
   date: string;
   readBy: string[];
   targetUser?: string;
-  type?: 'post' | 'comment' | 'cheer' | 'reaction' | 'bender' | 'invite' | 'tag' | 'imposter' | 'beacon' | 'chat' | 'friend_request' | 'friend_accept';
+  type?: 'post' | 'comment' | 'cheer' | 'reaction' | 'bender' | 'first_pour' | 'invite' | 'tag' | 'imposter' | 'beacon' | 'chat' | 'friend_request' | 'friend_accept';
 }
 
 export interface Pub {

@@ -110,10 +110,10 @@ export default function UserProfileManager({
     avgRating: string;
     favoriteStyle: string;
     totalCheers: number;
-    benderCount: number;
-    longestDrinkingStreak: number;
+    stylesTried: number;
+    pubsVisited: number;
+    firstPourCount: number;
     longestDryStreak: number;
-    currentDrinkingStreak: number;
     currentDryStreak: number;
   } | null>(null);
   const [loadingStats, setLoadingStats] = useState(false);
@@ -409,10 +409,10 @@ export default function UserProfileManager({
             avgRating: data.avgRating,
             favoriteStyle: data.favoriteStyle,
             totalCheers: data.totalCheers,
-            benderCount: data.benderCount,
-            longestDrinkingStreak: data.longestDrinkingStreak || 0,
+            stylesTried: data.stylesTried || 0,
+            pubsVisited: data.pubsVisited || 0,
+            firstPourCount: data.firstPourCount || 0,
             longestDryStreak: data.longestDryStreak || 0,
-            currentDrinkingStreak: data.currentDrinkingStreak || 0,
             currentDryStreak: data.currentDryStreak || 0
           });
         }
@@ -707,22 +707,22 @@ export default function UserProfileManager({
                         })()}
                       />
                       <StatChip
-                        label="Bender Days"
-                        emoji="🚨"
+                        label="First Pours"
+                        emoji="🌅"
                         colorClass="bg-red-50 border-red-100 text-red-600"
-                        value={profileStats.benderCount}
+                        value={profileStats.firstPourCount}
                       />
                       <StatChip
-                        label="Longest Drink"
-                        emoji="🔥"
+                        label="Styles Tried"
+                        emoji="🎨"
                         colorClass="bg-orange-50 border-orange-100 text-orange-700"
-                        value={`${profileStats.longestDrinkingStreak}d`}
+                        value={profileStats.stylesTried}
                       />
                       <StatChip
-                        label="Current Drink"
-                        emoji="⚡"
+                        label="Pubs Visited"
+                        emoji="🗺️"
                         colorClass="bg-emerald-50 border-emerald-100 text-emerald-700"
-                        value={`${profileStats.currentDrinkingStreak}d`}
+                        value={profileStats.pubsVisited}
                       />
                       <StatChip
                         label="Longest Dry"
