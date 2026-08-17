@@ -13,6 +13,7 @@ interface UserProfileManagerProps {
   onCurrentUserChanged: (username: string) => void;
   onProfileAddedOrUpdated: (profile: UserProfile) => void;
   onProfileDeleted: (username: string) => void;
+  onSelfAccountDeleted: (password: string) => Promise<{ success: boolean; error?: string }>;
   isOpen: boolean;
   onClose: () => void;
   viewingUsername?: string | null;
@@ -72,6 +73,7 @@ export default function UserProfileManager({
   onCurrentUserChanged,
   onProfileAddedOrUpdated,
   onProfileDeleted,
+  onSelfAccountDeleted,
   isOpen,
   onClose,
   viewingUsername,
@@ -191,6 +193,25 @@ export default function UserProfileManager({
   const [deleteConfirmUser, setDeleteConfirmUser] = useState<string | null>(null);
   const [confirmInput, setConfirmInput] = useState("");
 
+  // Self-service "delete my account" state
+  const [showSelfDeleteForm, setShowSelfDeleteForm] = useState(false);
+  const [selfDeletePassword, setSelfDeletePassword] = useState("");
+  const [selfDeleteConfirmText, setSelfDeleteConfirmText] = useState("");
+  const [selfDeleteError, setSelfDeleteError] = useState<string | null>(null);
+  const [isDeletingSelf, setIsDeletingSelf] = useState(false);
+
+  const handleSelfDeleteSubmit = async () => {
+    setSelfDeleteError(null);
+    setIsDeletingSelf(true);
+    const result = await onSelfAccountDeleted(selfDeletePassword);
+    setIsDeletingSelf(false);
+    if (!result.success) {
+      setSelfDeleteError(result.error || "Failed to delete your account.");
+    }
+    // On success the app logs the user out and unmounts this modal, so
+    // there's no local state left to clean up here.
+  };
+
   // Determine if we are in "Viewer Capacity" for another user
   const isViewOnly = !!viewingUsername && viewingUsername.toLowerCase() !== currentUser.toLowerCase();
 
@@ -219,6 +240,12 @@ export default function UserProfileManager({
         setLoadedUsername(currentUser);
         setIsEditing(false);
       }
+    }
+    if (isOpen && !prevOpen) {
+      setShowSelfDeleteForm(false);
+      setSelfDeletePassword("");
+      setSelfDeleteConfirmText("");
+      setSelfDeleteError(null);
     }
     setPrevOpen(isOpen);
   }, [currentUser, users, isOpen, prevOpen, loadedUsername]);
@@ -489,6 +516,90 @@ export default function UserProfileManager({
                     onProfileAddedOrUpdated={onProfileAddedOrUpdated}
                     onViewProfileRequested={onViewProfileRequested}
                   />
+                </div>
+              )}
+
+              {/* Self-service account deletion */}
+              {!isViewOnly && (
+                <div className="space-y-2 pt-2">
+                  <span className="block text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Danger Zone
+                  </span>
+                  {!showSelfDeleteForm ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowSelfDeleteForm(true)}
+                      className="flex items-center gap-1.5 text-[11px] font-bold text-red-500 hover:text-red-600 hover:bg-red-50 rounded-lg px-2.5 py-1.5 transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Delete My Account
+                    </button>
+                  ) : (
+                    <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-xs space-y-3">
+                      <div>
+                        <p className="text-red-700 font-bold">⚠️ Delete your account permanently?</p>
+                        <p className="text-red-600 text-[11px] font-normal leading-relaxed mt-1">
+                          This deletes your profile and every pint you've logged. You'll be removed from
+                          any friends lists. This cannot be undone.
+                        </p>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label htmlFor="self-delete-password" className="text-[9px] text-red-500 font-bold uppercase block">
+                          Enter your password
+                        </label>
+                        <input
+                          id="self-delete-password"
+                          type="password"
+                          placeholder="Your account password"
+                          value={selfDeletePassword}
+                          onChange={(e) => setSelfDeletePassword(e.target.value)}
+                          className="w-full px-2.5 py-1.5 border border-red-200 rounded bg-white text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label htmlFor="self-delete-confirm" className="text-[9px] text-red-500 font-bold uppercase block">
+                          Type <span className="underline font-extrabold">DELETE</span> to confirm
+                        </label>
+                        <input
+                          id="self-delete-confirm"
+                          type="text"
+                          placeholder="DELETE"
+                          value={selfDeleteConfirmText}
+                          onChange={(e) => setSelfDeleteConfirmText(e.target.value)}
+                          className="w-full px-2.5 py-1.5 border border-red-200 rounded bg-white text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500"
+                        />
+                      </div>
+
+                      {selfDeleteError && (
+                        <p className="text-red-700 font-semibold text-[11px]">{selfDeleteError}</p>
+                      )}
+
+                      <div className="flex gap-1.5">
+                        <button
+                          type="button"
+                          disabled={selfDeleteConfirmText !== "DELETE" || !selfDeletePassword || isDeletingSelf}
+                          onClick={handleSelfDeleteSubmit}
+                          className="px-3 py-1.5 bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white font-bold rounded cursor-pointer transition-colors text-[11px] shrink-0"
+                        >
+                          {isDeletingSelf ? "Deleting..." : "Permanently Delete"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowSelfDeleteForm(false);
+                            setSelfDeletePassword("");
+                            setSelfDeleteConfirmText("");
+                            setSelfDeleteError(null);
+                          }}
+                          className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded cursor-pointer transition-colors text-[11px] shrink-0"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

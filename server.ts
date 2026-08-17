@@ -1031,6 +1031,20 @@ async function deleteUser(username: string): Promise<boolean> {
   const firestore = getFirestoreInstance();
   if (firestore && useFirestore) {
     try {
+      // Strip the departing user from everyone else's friends/friendRequests
+      // lists first, so no other profile is left pointing at a deleted account.
+      const allUsers = await getAllUsers();
+      for (const other of allUsers) {
+        if (other.username.toLowerCase() === usernameKey) continue;
+        const hadFriend = (other.friends || []).some((f) => f.toLowerCase() === usernameKey);
+        const hadRequest = (other.friendRequests || []).some((f) => f.toLowerCase() === usernameKey);
+        if (hadFriend || hadRequest) {
+          other.friends = (other.friends || []).filter((f) => f.toLowerCase() !== usernameKey);
+          other.friendRequests = (other.friendRequests || []).filter((f) => f.toLowerCase() !== usernameKey);
+          await saveUser(other);
+        }
+      }
+
       // Delete user
       await deleteDoc(doc(firestore, "users", usernameKey));
 
@@ -2823,10 +2837,31 @@ app.post("/api/friends/remove", async (req, res) => {
 // DELETE User Profile and clean up their beer logs
 app.delete("/api/users/:username", async (req, res) => {
   const { username } = req.params;
-  const currentUser = req.query.currentUser || req.headers["x-current-user"];
-  if (!isSeymoreBeers(currentUser)) {
-    res.status(403).json({ error: "Unauthorized. Only Seymore Beers can delete profiles." });
+  const currentUser = (req.query.currentUser || req.headers["x-current-user"] || "").toString();
+  const isAdmin = isSeymoreBeers(currentUser);
+  const isSelf = currentUser.toLowerCase() === username.toLowerCase();
+
+  if (!isAdmin && !isSelf) {
+    res.status(403).json({ error: "Unauthorized. You can only delete your own profile." });
     return;
+  }
+
+  // Self-service deletion requires re-entering the account password, since
+  // this app has no real session/auth tokens - the password is the only
+  // proof of ownership available.
+  if (isSelf && !isAdmin) {
+    const password = (req.body && req.body.password ? req.body.password : "").toString();
+    const allUsers = await getAllUsers();
+    const user = allUsers.find((u) => u.username.toLowerCase() === username.toLowerCase());
+    if (!user) {
+      res.status(404).json({ error: "User profile not found" });
+      return;
+    }
+    const userPassword = user.password || "Pints!";
+    if (userPassword !== password) {
+      res.status(401).json({ error: "Incorrect password. Please re-enter your password to confirm account deletion." });
+      return;
+    }
   }
 
   const deleted = await deleteUser(username);

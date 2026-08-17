@@ -1236,6 +1236,32 @@ export default function App() {
     }
   };
 
+  // Self-service account deletion: unlike handleProfileDeleted (admin removing
+  // someone else), this always ends in a full logout rather than switching
+  // to another account.
+  const handleSelfAccountDeleted = async (password: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const response = await fetch(`/api/users/${encodeURIComponent(currentUser)}?currentUser=${encodeURIComponent(currentUser)}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return { success: false, error: data.error || "Failed to delete your account." };
+      }
+
+      setUsers((prevUsers) => prevUsers.filter((u) => u.username !== currentUser));
+      setLogs((prevLogs) => prevLogs.filter((log) => log.user !== currentUser));
+      handleLogout();
+      return { success: true };
+    } catch (err: any) {
+      console.error(err);
+      return { success: false, error: err.message || "Could not delete your account." };
+    }
+  };
+
   const handlePubCreated = (newPub: Pub) => {
     setPubs((prev) => [...prev, newPub]);
   };
@@ -1936,6 +1962,7 @@ export default function App() {
         onCurrentUserChanged={handleCurrentUserChange}
         onProfileAddedOrUpdated={handleProfileAddedOrUpdated}
         onProfileDeleted={handleProfileDeleted}
+        onSelfAccountDeleted={handleSelfAccountDeleted}
         clientUseFirestore={clientUseFirestore}
         onViewProfileRequested={(username) => setViewingProfileUsername(username)}
         onBackToMyProfile={() => setViewingProfileUsername(null)}
