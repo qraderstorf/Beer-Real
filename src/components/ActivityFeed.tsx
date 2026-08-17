@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Star, MessageSquare, Flame, Trash2, Heart, Search, Filter, Award, RefreshCw, Edit, Camera, Siren, Plus, Smile, Pin, X } from "lucide-react";
+import { Star, MessageSquare, Flame, Trash2, Heart, Search, Filter, Award, RefreshCw, Edit, Camera, Siren, Plus, Smile, Pin, X, Flag } from "lucide-react";
 import { BeerLog, UserProfile, isSeymoreBeers, Pub } from "../types";
 import UserAvatar from "./UserAvatar";
 import MentionDropdown from "./MentionDropdown";
@@ -158,6 +158,14 @@ function renderTextWithMentions(
   );
 }
 
+const POST_REPORT_REASONS = [
+  "Spam",
+  "Harassment or bullying",
+  "Inappropriate or offensive content",
+  "Underage drinking concern",
+  "Other",
+];
+
 const REACTION_TYPES = [
   { key: "cheers", emoji: "🍻", label: "Cheers" },
   { key: "creamy", emoji: "🍺", label: "Creamy" },
@@ -232,6 +240,43 @@ export default function ActivityFeed({
 }: ActivityFeedProps) {
   const [activeReactionTooltip, setActiveReactionTooltip] = useState<string | null>(null);
   const [activeCustomEmojiLogId, setActiveCustomEmojiLogId] = useState<string | null>(null);
+  const [activeReportLogId, setActiveReportLogId] = useState<string | null>(null);
+  const [reportReason, setReportReason] = useState("");
+  const [reportNote, setReportNote] = useState("");
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+  const [reportSubmittedLogId, setReportSubmittedLogId] = useState<string | null>(null);
+
+  const handleSubmitPostReport = async (log: BeerLog) => {
+    if (!reportReason) return;
+    setIsSubmittingReport(true);
+    try {
+      const res = await fetch("/api/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reporterUsername: currentUser,
+          targetType: "post",
+          targetId: log.id,
+          targetUsername: log.user,
+          reason: reportReason,
+          note: reportNote.trim() || undefined,
+        }),
+      });
+      if (res.ok) {
+        setReportSubmittedLogId(log.id);
+        setTimeout(() => {
+          setActiveReportLogId(null);
+          setReportSubmittedLogId(null);
+          setReportReason("");
+          setReportNote("");
+        }, 1600);
+      }
+    } catch (err) {
+      console.error("Failed to submit report:", err);
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
   const [localSearchTerm, setLocalSearchTerm] = useState(propSearchTerm || "");
   const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -917,7 +962,7 @@ export default function ActivityFeed({
                       </div>
                     </div>
                     
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 relative">
                       {log.user === currentUser && (
                         <button
                           onClick={() => onEditLogRequested?.(log)}
@@ -925,6 +970,20 @@ export default function ActivityFeed({
                           title="Edit pint details"
                         >
                           <Edit className="w-4 h-4" />
+                        </button>
+                      )}
+                      {log.user.toLowerCase() !== currentUser.toLowerCase() && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveReportLogId(activeReportLogId === log.id ? null : log.id);
+                            setReportReason("");
+                            setReportNote("");
+                          }}
+                          className="text-slate-300 hover:text-red-500 p-2 rounded-lg hover:bg-red-50/50 transition-all focus:outline-none cursor-pointer"
+                          title="Report this post"
+                        >
+                          <Flag className="w-4 h-4" />
                         </button>
                       )}
                       {(isSeymoreBeers(currentUser) || log.user.toLowerCase() === currentUser.toLowerCase()) && (
@@ -935,6 +994,59 @@ export default function ActivityFeed({
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
+                      )}
+
+                      {activeReportLogId === log.id && (
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          className="absolute top-full right-0 mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 shadow-2xl z-40 w-[220px] space-y-2"
+                        >
+                          {reportSubmittedLogId === log.id ? (
+                            <p className="text-emerald-600 dark:text-emerald-400 text-[11px] font-bold">
+                              Report submitted. Thanks for flagging this.
+                            </p>
+                          ) : (
+                            <>
+                              <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">
+                                Report this post
+                              </span>
+                              <select
+                                value={reportReason}
+                                onChange={(e) => setReportReason(e.target.value)}
+                                className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-[11px] text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                              >
+                                <option value="">Select a reason...</option>
+                                {POST_REPORT_REASONS.map((r) => (
+                                  <option key={r} value={r}>{r}</option>
+                                ))}
+                              </select>
+                              <input
+                                type="text"
+                                placeholder="Additional details (optional)"
+                                value={reportNote}
+                                onChange={(e) => setReportNote(e.target.value)}
+                                className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-[11px] text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                              />
+                              <div className="flex gap-1.5">
+                                <button
+                                  type="button"
+                                  disabled={!reportReason || isSubmittingReport}
+                                  onClick={() => handleSubmitPostReport(log)}
+                                  className="px-2.5 py-1 bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white font-bold rounded cursor-pointer transition-colors text-[10px] shrink-0"
+                                >
+                                  {isSubmittingReport ? "..." : "Submit"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveReportLogId(null)}
+                                  className="px-2.5 py-1 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold rounded cursor-pointer transition-colors text-[10px] shrink-0"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>

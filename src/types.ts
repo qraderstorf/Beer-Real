@@ -35,6 +35,7 @@ export interface UserProfile {
   email?: string;
   friends?: string[]; // mutual friend usernames
   friendRequests?: string[]; // incoming pending friend request usernames
+  blockedUsers?: string[]; // usernames this profile has blocked
   stats?: {
     totalPints: number;
     avgRating: string;
@@ -81,6 +82,18 @@ export interface PubChatMessage {
   user: string;
   text: string;
   date: string;
+}
+
+export interface ContentReport {
+  id: string;
+  reporterUsername: string;
+  targetType: 'user' | 'post' | 'comment';
+  targetId: string; // username for 'user', beer log id for 'post', comment id for 'comment'
+  targetUsername?: string; // the username being reported/whose content is being reported
+  reason: string;
+  note?: string;
+  date: string;
+  status: 'open' | 'resolved';
 }
 
 

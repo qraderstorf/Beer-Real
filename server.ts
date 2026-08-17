@@ -2,7 +2,7 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
-import { BeerLog, UserProfile, AppNotification, Pub, PubChatMessage } from "./src/types";
+import { BeerLog, UserProfile, AppNotification, Pub, PubChatMessage, ContentReport } from "./src/types";
 import { normalizeBeerName } from "./src/data/beerCatalog";
 import { initializeApp } from "firebase/app";
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, orderBy, where, writeBatch, limit, onSnapshot, runTransaction } from "firebase/firestore";
@@ -1031,16 +1031,19 @@ async function deleteUser(username: string): Promise<boolean> {
   const firestore = getFirestoreInstance();
   if (firestore && useFirestore) {
     try {
-      // Strip the departing user from everyone else's friends/friendRequests
-      // lists first, so no other profile is left pointing at a deleted account.
+      // Strip the departing user from everyone else's friends/friendRequests/
+      // blockedUsers lists first, so no other profile is left pointing at a
+      // deleted account.
       const allUsers = await getAllUsers();
       for (const other of allUsers) {
         if (other.username.toLowerCase() === usernameKey) continue;
         const hadFriend = (other.friends || []).some((f) => f.toLowerCase() === usernameKey);
         const hadRequest = (other.friendRequests || []).some((f) => f.toLowerCase() === usernameKey);
-        if (hadFriend || hadRequest) {
+        const hadBlock = (other.blockedUsers || []).some((f) => f.toLowerCase() === usernameKey);
+        if (hadFriend || hadRequest || hadBlock) {
           other.friends = (other.friends || []).filter((f) => f.toLowerCase() !== usernameKey);
           other.friendRequests = (other.friendRequests || []).filter((f) => f.toLowerCase() !== usernameKey);
+          other.blockedUsers = (other.blockedUsers || []).filter((f) => f.toLowerCase() !== usernameKey);
           await saveUser(other);
         }
       }
@@ -1412,6 +1415,36 @@ async function savePubChatMessage(msg: PubChatMessage): Promise<PubChatMessage> 
     }
   }
   return msg;
+}
+
+// Helper to get all content reports (newest first)
+async function getAllReports(): Promise<ContentReport[]> {
+  const firestore = getFirestoreInstance();
+  const list: ContentReport[] = [];
+  if (firestore && useFirestore) {
+    try {
+      const snap = await getDocs(collection(firestore, "reports"));
+      snap.forEach((docSnap) => {
+        list.push(docSnap.data() as ContentReport);
+      });
+    } catch (err) {
+      console.error("Firestore error reading reports:", err);
+    }
+  }
+  return list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+}
+
+// Helper to save a content report
+async function saveReport(report: ContentReport): Promise<ContentReport> {
+  const firestore = getFirestoreInstance();
+  if (firestore && useFirestore) {
+    try {
+      await setDoc(doc(firestore, "reports", report.id), sanitizeForFirestore(report));
+    } catch (err) {
+      console.error("Firestore error saving report:", err);
+    }
+  }
+  return report;
 }
 
 // Helper to get notifications
@@ -2699,6 +2732,13 @@ app.post("/api/friends/request", async (req, res) => {
     return;
   }
 
+  const fromBlockedTo = (fromUser.blockedUsers || []).some((b) => b.toLowerCase() === to.toLowerCase());
+  const toBlockedFrom = (toUser.blockedUsers || []).some((b) => b.toLowerCase() === from.toLowerCase());
+  if (fromBlockedTo || toBlockedFrom) {
+    res.status(403).json({ error: "Unable to send friend request." });
+    return;
+  }
+
   // If the other user already sent us a request, auto-accept instead of leaving two pending requests
   const toAlreadyRequestedUs = (fromUser.friendRequests || []).some((r) => r.toLowerCase() === to.toLowerCase());
   if (toAlreadyRequestedUs) {
@@ -2832,6 +2872,135 @@ app.post("/api/friends/remove", async (req, res) => {
   }
 
   res.json({ status: "removed", users: friendProfile ? [userProfile, friendProfile] : [userProfile] });
+});
+
+// POST Block User - hides the target's content from the blocker and severs any friendship
+app.post("/api/users/:username/block", async (req, res) => {
+  const { username } = req.params;
+  const targetUsername = (req.body.targetUsername || "").toString().trim();
+
+  if (!targetUsername) {
+    res.status(400).json({ error: "'targetUsername' is required." });
+    return;
+  }
+  if (targetUsername.toLowerCase() === username.toLowerCase()) {
+    res.status(400).json({ error: "You can't block yourself." });
+    return;
+  }
+
+  const allUsers = await getAllUsers();
+  const userProfile = allUsers.find((u) => u.username.toLowerCase() === username.toLowerCase());
+  const targetProfile = allUsers.find((u) => u.username.toLowerCase() === targetUsername.toLowerCase());
+
+  if (!userProfile) {
+    res.status(404).json({ error: "User not found." });
+    return;
+  }
+
+  const blocked = new Set((userProfile.blockedUsers || []).map((b) => b.toLowerCase()));
+  blocked.add(targetUsername.toLowerCase());
+  userProfile.blockedUsers = Array.from(blocked);
+
+  // Blocking severs any existing friendship in both directions, and clears
+  // any pending request either side sent so blocking can't be worked around.
+  userProfile.friends = (userProfile.friends || []).filter((f) => f.toLowerCase() !== targetUsername.toLowerCase());
+  userProfile.friendRequests = (userProfile.friendRequests || []).filter((f) => f.toLowerCase() !== targetUsername.toLowerCase());
+  await saveUser(userProfile);
+
+  if (targetProfile) {
+    targetProfile.friends = (targetProfile.friends || []).filter((f) => f.toLowerCase() !== username.toLowerCase());
+    targetProfile.friendRequests = (targetProfile.friendRequests || []).filter((f) => f.toLowerCase() !== username.toLowerCase());
+    await saveUser(targetProfile);
+  }
+
+  res.json({ status: "blocked", users: targetProfile ? [userProfile, targetProfile] : [userProfile] });
+});
+
+// POST Unblock User
+app.post("/api/users/:username/unblock", async (req, res) => {
+  const { username } = req.params;
+  const targetUsername = (req.body.targetUsername || "").toString().trim();
+
+  if (!targetUsername) {
+    res.status(400).json({ error: "'targetUsername' is required." });
+    return;
+  }
+
+  const allUsers = await getAllUsers();
+  const userProfile = allUsers.find((u) => u.username.toLowerCase() === username.toLowerCase());
+  if (!userProfile) {
+    res.status(404).json({ error: "User not found." });
+    return;
+  }
+
+  userProfile.blockedUsers = (userProfile.blockedUsers || []).filter((b) => b.toLowerCase() !== targetUsername.toLowerCase());
+  await saveUser(userProfile);
+
+  res.json({ status: "unblocked", users: [userProfile] });
+});
+
+// POST Submit a content/user report
+app.post("/api/reports", async (req, res) => {
+  const reporterUsername = (req.body.reporterUsername || "").toString().trim();
+  const targetType = (req.body.targetType || "").toString().trim();
+  const targetId = (req.body.targetId || "").toString().trim();
+  const targetUsername = req.body.targetUsername ? req.body.targetUsername.toString().trim() : undefined;
+  const reason = (req.body.reason || "").toString().trim();
+  const note = req.body.note ? req.body.note.toString().trim().slice(0, 500) : undefined;
+
+  if (!reporterUsername || !targetType || !targetId || !reason) {
+    res.status(400).json({ error: "reporterUsername, targetType, targetId, and reason are required." });
+    return;
+  }
+  if (!["user", "post", "comment"].includes(targetType)) {
+    res.status(400).json({ error: "targetType must be 'user', 'post', or 'comment'." });
+    return;
+  }
+
+  const report: ContentReport = {
+    id: `report-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    reporterUsername,
+    targetType: targetType as ContentReport["targetType"],
+    targetId,
+    targetUsername,
+    reason,
+    note,
+    date: new Date().toISOString(),
+    status: "open",
+  };
+
+  await saveReport(report);
+  res.json({ status: "submitted", report });
+});
+
+// GET all reports (admin only)
+app.get("/api/reports", async (req, res) => {
+  const currentUser = (req.query.currentUser || req.headers["x-current-user"] || "").toString();
+  if (!isSeymoreBeers(currentUser)) {
+    res.status(403).json({ error: "Unauthorized. Admin access required." });
+    return;
+  }
+  const reports = await getAllReports();
+  res.json(reports);
+});
+
+// POST resolve a report (admin only)
+app.post("/api/reports/:id/resolve", async (req, res) => {
+  const currentUser = (req.body.currentUser || "").toString();
+  if (!isSeymoreBeers(currentUser)) {
+    res.status(403).json({ error: "Unauthorized. Admin access required." });
+    return;
+  }
+  const { id } = req.params;
+  const reports = await getAllReports();
+  const report = reports.find((r) => r.id === id);
+  if (!report) {
+    res.status(404).json({ error: "Report not found." });
+    return;
+  }
+  report.status = "resolved";
+  await saveReport(report);
+  res.json({ status: "resolved", report });
 });
 
 // DELETE User Profile and clean up their beer logs

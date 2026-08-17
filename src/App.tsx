@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Beer, BarChart3, Activity, Users, Compass, ChevronDown, Smile, RefreshCw, LogOut, Bell, Smartphone, Database, Cloud, Flame, ShieldAlert, Tag, MessageSquare, Heart, Sparkles, UserPlus, UserCheck } from "lucide-react";
 import { BeerLog, UserProfile, AppNotification, Pub } from "./types";
@@ -96,6 +96,26 @@ export default function App() {
   });
 
   const [showFriendsOnboarding, setShowFriendsOnboarding] = useState(false);
+
+  // Usernames the current user has blocked, so their posts/comments can be
+  // hidden client-side. A profile is the source of truth for the block list;
+  // this just derives a fast lookup set from it.
+  const blockedUsernamesLower = useMemo(() => {
+    const me = users.find((u) => u.username === currentUser);
+    return new Set((me?.blockedUsers || []).map((b) => b.toLowerCase()));
+  }, [users, currentUser]);
+
+  const applyBlockFilter = (list: BeerLog[]): BeerLog[] => {
+    if (blockedUsernamesLower.size === 0) return list;
+    return list
+      .filter((log) => !blockedUsernamesLower.has(log.user.toLowerCase()))
+      .map((log) => {
+        if (!log.comments || log.comments.length === 0) return log;
+        const hasBlockedComment = log.comments.some((c) => blockedUsernamesLower.has(c.user.toLowerCase()));
+        if (!hasBlockedComment) return log;
+        return { ...log, comments: log.comments.filter((c) => !blockedUsernamesLower.has(c.user.toLowerCase())) };
+      });
+  };
 
   // Ensure selectedPubId matches an existing pub or fallback to global
   useEffect(() => {
@@ -1897,7 +1917,7 @@ export default function App() {
 
               {activeTab === "feed" && (
                 <ActivityFeed
-                  logs={isFilterActive ? filteredBeers : logs}
+                  logs={applyBlockFilter(isFilterActive ? filteredBeers : logs)}
                   users={users}
                   currentUser={currentUser}
                   pubs={pubs}

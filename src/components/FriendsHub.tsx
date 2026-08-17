@@ -44,12 +44,15 @@ export default function FriendsHub({
   const discoverable = useMemo(() => {
     const friendsLower = myFriends.map((f) => f.toLowerCase());
     const outgoingLower = myOutgoingRequests.map((f) => f.toLowerCase());
+    const myBlockedLower = (me?.blockedUsers || []).map((f) => f.toLowerCase());
     return users
       .filter(
         (u) =>
           u.username.toLowerCase() !== currentUser.toLowerCase() &&
           !friendsLower.includes(u.username.toLowerCase()) &&
-          !outgoingLower.includes(u.username.toLowerCase())
+          !outgoingLower.includes(u.username.toLowerCase()) &&
+          !myBlockedLower.includes(u.username.toLowerCase()) &&
+          !(u.blockedUsers || []).some((b) => b.toLowerCase() === currentUser.toLowerCase())
       )
       .filter((u) => {
         if (!search.trim()) return true;

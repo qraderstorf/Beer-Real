@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Check, Calendar, Sparkles, X, Smile, Trash2, Trophy, Flame, Award, Shield, Heart, ZoomIn, ZoomOut, Pencil, ArrowLeft } from "lucide-react";
-import { UserProfile, BeerLog, isSeymoreBeers } from "../types";
+import { Check, Calendar, Sparkles, X, Smile, Trash2, Trophy, Flame, Award, Shield, Heart, ZoomIn, ZoomOut, Pencil, ArrowLeft, Ban, Flag } from "lucide-react";
+import { UserProfile, BeerLog, ContentReport, isSeymoreBeers } from "../types";
 import { getMostDrankBeerForUser, compressImage } from "../utils";
 import UserAvatar from "./UserAvatar";
 import FriendsHub from "./FriendsHub";
@@ -23,6 +23,15 @@ interface UserProfileManagerProps {
 }
 
 const COMMON_EMOJIS = ["🍻", "🍺", "☕", "🍋", "🍊", "🍷", "🍹", "🥂", "🥃", "🍔", "🍕", "😎", "👾", "🦊", "🐼", "🦁", "👑"];
+
+const REPORT_REASONS = [
+  "Spam",
+  "Harassment or bullying",
+  "Fake account / impersonation",
+  "Inappropriate or offensive content",
+  "Underage user",
+  "Other",
+];
 
 function getLocalDateString(dateInput: Date | string | number, timeZone: string): string {
   const d = new Date(dateInput);
@@ -226,6 +235,89 @@ export default function UserProfileManager({
     realName: displayedUsername
   };
 
+  // Block / Unblock the currently-viewed user
+  const [isBlockActionPending, setIsBlockActionPending] = useState(false);
+  const [blockError, setBlockError] = useState<string | null>(null);
+
+  // Report the currently-viewed user
+  const [showReportForm, setShowReportForm] = useState(false);
+  const [reportReason, setReportReason] = useState("");
+  const [reportNote, setReportNote] = useState("");
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+  const [reportSubmitted, setReportSubmitted] = useState(false);
+
+  const myProfile = users.find((u) => u.username === currentUser);
+  const isTargetBlocked = (myProfile?.blockedUsers || []).some(
+    (b) => b.toLowerCase() === targetUser.username.toLowerCase()
+  );
+
+  const handleToggleBlock = async () => {
+    setIsBlockActionPending(true);
+    setBlockError(null);
+    try {
+      const endpoint = isTargetBlocked ? "unblock" : "block";
+      const res = await fetch(`/api/users/${encodeURIComponent(currentUser)}/${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetUsername: targetUser.username }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not update block status.");
+      (data.users || []).forEach((u: UserProfile) => onProfileAddedOrUpdated(u));
+    } catch (err: any) {
+      setBlockError(err.message || "Something went wrong.");
+    } finally {
+      setIsBlockActionPending(false);
+    }
+  };
+
+  const handleSubmitReport = async () => {
+    if (!reportReason) {
+      setReportError("Please select a reason.");
+      return;
+    }
+    setIsSubmittingReport(true);
+    setReportError(null);
+    try {
+      const res = await fetch("/api/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reporterUsername: currentUser,
+          targetType: "user",
+          targetId: targetUser.username,
+          targetUsername: targetUser.username,
+          reason: reportReason,
+          note: reportNote.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not submit report.");
+      setReportSubmitted(true);
+      setTimeout(() => {
+        setShowReportForm(false);
+        setReportSubmitted(false);
+        setReportReason("");
+        setReportNote("");
+      }, 1800);
+    } catch (err: any) {
+      setReportError(err.message || "Something went wrong.");
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
+
+  // Reset block/report UI state whenever the viewed profile changes
+  useEffect(() => {
+    setShowReportForm(false);
+    setReportReason("");
+    setReportNote("");
+    setReportError(null);
+    setReportSubmitted(false);
+    setBlockError(null);
+  }, [viewingUsername]);
+
   // Sync profile data when current user changes or modal opens
   useEffect(() => {
     if (isOpen && (loadedUsername !== currentUser || !prevOpen)) {
@@ -343,6 +435,52 @@ export default function UserProfileManager({
     };
   }, [isOpen, displayedUsername, clientUseFirestore]);
 
+  // Admin-only: load open content/user reports when the modal opens
+  const [reports, setReports] = useState<ContentReport[]>([]);
+  const [loadingReports, setLoadingReports] = useState(false);
+  const [resolvingReportId, setResolvingReportId] = useState<string | null>(null);
+  const isAdmin = isSeymoreBeers(currentUser);
+
+  useEffect(() => {
+    if (!isOpen || isViewOnly || !isAdmin) return;
+    let isMounted = true;
+    (async () => {
+      setLoadingReports(true);
+      try {
+        const res = await fetch(`/api/reports?currentUser=${encodeURIComponent(currentUser)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted) setReports(data);
+        }
+      } catch (err) {
+        console.error("Failed to load reports:", err);
+      } finally {
+        if (isMounted) setLoadingReports(false);
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, isViewOnly, isAdmin, currentUser]);
+
+  const handleResolveReport = async (reportId: string) => {
+    setResolvingReportId(reportId);
+    try {
+      const res = await fetch(`/api/reports/${encodeURIComponent(reportId)}/resolve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentUser }),
+      });
+      if (res.ok) {
+        setReports((prev) => prev.map((r) => (r.id === reportId ? { ...r, status: "resolved" } : r)));
+      }
+    } catch (err) {
+      console.error("Failed to resolve report:", err);
+    } finally {
+      setResolvingReportId(null);
+    }
+  };
+
   if (!isOpen) return null;
 
   const showEditForm = !isViewOnly && isEditing;
@@ -420,6 +558,102 @@ export default function UserProfileManager({
                   </div>
                 </div>
               </div>
+
+              {/* Block / Report actions - only shown when looking at someone else's profile */}
+              {isViewOnly && (
+                <div className="space-y-2 -mt-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleToggleBlock}
+                      disabled={isBlockActionPending}
+                      className={`flex items-center gap-1.5 text-[11px] font-bold rounded-lg px-2.5 py-1.5 transition-colors cursor-pointer disabled:opacity-50 ${
+                        isTargetBlocked
+                          ? "text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                          : "text-slate-500 hover:text-red-600 hover:bg-red-50"
+                      }`}
+                    >
+                      <Ban className="w-3.5 h-3.5" />
+                      {isBlockActionPending ? "..." : isTargetBlocked ? "Unblock" : "Block"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowReportForm((v) => !v)}
+                      className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg px-2.5 py-1.5 transition-colors cursor-pointer"
+                    >
+                      <Flag className="w-3.5 h-3.5" />
+                      Report
+                    </button>
+                  </div>
+                  {blockError && <p className="text-red-600 text-[11px] font-semibold">{blockError}</p>}
+                  {isTargetBlocked && (
+                    <p className="text-[11px] text-slate-400 font-medium">
+                      You've blocked @{targetUser.username}. Their pints and comments are hidden from you.
+                    </p>
+                  )}
+
+                  {showReportForm && (
+                    <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-xs space-y-2.5">
+                      {reportSubmitted ? (
+                        <p className="text-emerald-700 font-bold flex items-center gap-1.5">
+                          <Check className="w-4 h-4" /> Report submitted. Thanks for flagging this.
+                        </p>
+                      ) : (
+                        <>
+                          <p className="text-red-700 font-bold">Report @{targetUser.username}</p>
+                          <div className="space-y-1">
+                            <label htmlFor="report-reason-select" className="text-[9px] text-red-500 font-bold uppercase block">
+                              Reason
+                            </label>
+                            <select
+                              id="report-reason-select"
+                              value={reportReason}
+                              onChange={(e) => setReportReason(e.target.value)}
+                              className="w-full px-2.5 py-1.5 border border-red-200 rounded bg-white text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500"
+                            >
+                              <option value="">Select a reason...</option>
+                              {REPORT_REASONS.map((r) => (
+                                <option key={r} value={r}>{r}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="space-y-1">
+                            <label htmlFor="report-note-input" className="text-[9px] text-red-500 font-bold uppercase block">
+                              Additional details (optional)
+                            </label>
+                            <input
+                              id="report-note-input"
+                              type="text"
+                              placeholder="Anything else we should know?"
+                              value={reportNote}
+                              onChange={(e) => setReportNote(e.target.value)}
+                              className="w-full px-2.5 py-1.5 border border-red-200 rounded bg-white text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-red-500"
+                            />
+                          </div>
+                          {reportError && <p className="text-red-700 font-semibold text-[11px]">{reportError}</p>}
+                          <div className="flex gap-1.5">
+                            <button
+                              type="button"
+                              disabled={isSubmittingReport}
+                              onClick={handleSubmitReport}
+                              className="px-3 py-1.5 bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white font-bold rounded cursor-pointer transition-colors text-[11px] shrink-0"
+                            >
+                              {isSubmittingReport ? "Submitting..." : "Submit Report"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setShowReportForm(false)}
+                              className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded cursor-pointer transition-colors text-[11px] shrink-0"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Stats Section */}
               <div className="space-y-2.5">
@@ -686,6 +920,58 @@ export default function UserProfileManager({
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Admin-only: user & content reports queue */}
+              {!isViewOnly && isAdmin && (
+                <div className="space-y-3 pt-2">
+                  <span className="block text-xs font-bold uppercase tracking-wider text-slate-400">
+                    🔓 Admin: Reports ({reports.filter((r) => r.status === "open").length} open)
+                  </span>
+                  {loadingReports ? (
+                    <div className="text-xs text-slate-400 font-semibold">Loading reports...</div>
+                  ) : reports.length === 0 ? (
+                    <div className="text-xs text-slate-400 font-medium p-3 bg-slate-50 rounded-lg">
+                      No reports yet.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {reports.map((report) => (
+                        <div
+                          key={report.id}
+                          className={`p-2.5 rounded-xl border text-xs space-y-1.5 ${
+                            report.status === "open"
+                              ? "border-red-200 bg-red-50"
+                              : "border-slate-200 bg-slate-50 opacity-60"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <span className="font-extrabold text-slate-800 block truncate">
+                                {report.targetType === "user" ? "User" : report.targetType === "post" ? "Post" : "Comment"}: @{report.targetUsername || report.targetId}
+                              </span>
+                              <span className="text-[10px] text-slate-500 font-semibold block">
+                                Reported by @{report.reporterUsername} &middot; {new Date(report.date).toLocaleString()}
+                              </span>
+                            </div>
+                            {report.status === "open" && (
+                              <button
+                                type="button"
+                                disabled={resolvingReportId === report.id}
+                                onClick={() => handleResolveReport(report.id)}
+                                className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-bold rounded cursor-pointer transition-colors text-[10px] shrink-0"
+                              >
+                                {resolvingReportId === report.id ? "..." : "Mark Resolved"}
+                              </button>
+                            )}
+                          </div>
+                          <p className="text-slate-700 font-semibold">{report.reason}</p>
+                          {report.note && <p className="text-slate-500 italic">"{report.note}"</p>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
