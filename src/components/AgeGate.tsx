@@ -59,6 +59,12 @@ export default function AgeGate({ onVerified }: AgeGateProps) {
             </button>
           </div>
         </div>
+
+        <p className="mt-6 text-center text-[11px] text-slate-400 font-semibold">
+          <a href="/privacy.html" target="_blank" rel="noopener noreferrer" className="hover:text-amber-600 hover:underline">
+            Privacy Policy
+          </a>
+        </p>
       </div>
     </div>
   );

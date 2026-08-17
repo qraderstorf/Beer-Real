@@ -561,6 +561,12 @@ export default function LoginScreen({ users, onLoginSuccess, onProfileCreated }:
             )}
           </AnimatePresence>
         </div>
+
+        <p className="mt-6 text-center text-[11px] text-slate-400 font-semibold">
+          <a href="/privacy.html" target="_blank" rel="noopener noreferrer" className="hover:text-amber-600 hover:underline">
+            Privacy Policy
+          </a>
+        </p>
       </div>
 
       {/* Cropping Modal Overlay */}

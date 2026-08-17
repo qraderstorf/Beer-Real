@@ -1181,7 +1181,15 @@ export default function UserProfileManager({
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 border-t border-slate-150 bg-slate-50/50 flex justify-end">
+        <div className="p-4 border-t border-slate-150 bg-slate-50/50 flex items-center justify-between">
+          <a
+            href="/privacy.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[10px] text-slate-400 hover:text-amber-600 font-semibold hover:underline"
+          >
+            Privacy Policy
+          </a>
           <button
             onClick={onClose}
             className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg transition-all shadow-sm focus:outline-none cursor-pointer"
