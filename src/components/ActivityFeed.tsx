@@ -1012,9 +1012,6 @@ export default function ActivityFeed({
 
                     {/* Reaction Bar & Preset Buttons */}
                     {(() => {
-                      // Reactions nobody has used yet stay muted/ghosted so the bar doesn't
-                      // shout five colors at once - color is reserved for genuine engagement.
-                      const ghostClass = "bg-transparent text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60";
                       const presets = [
                         { 
                           key: "cheers", 
@@ -1066,10 +1063,12 @@ export default function ActivityFeed({
 
                       return (
                         <div className="flex items-center justify-start gap-2 mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800">
-                          {/* Pre-labeled buttons & Custom emoji reactions & Plus selector - single scrollable row so a full house of reactions never wraps to a second line */}
-                          <div className="flex flex-nowrap items-center gap-1.5 min-w-0 overflow-x-auto custom-scrollbar -mx-1 px-1 py-0.5">
-                            {/* Preset Buttons */}
-                            {presets.map((react) => {
+                          {/* Pre-labeled buttons & Custom emoji reactions & Plus selector - only reactions someone has
+                              actually used get a pill, so the row stays compact instead of wrapping/scrolling. The "+"
+                              button is always visible and is the one discovery point for every reaction type, used or not. */}
+                          <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                            {/* Preset Buttons - hidden entirely until at least one person has used them */}
+                            {presets.filter((react) => getReactionList(log, react.key).length > 0).map((react) => {
                               const reactorList = getReactionList(log, react.key);
                               const hasReacted = reactorList.includes(currentUser);
                               const count = reactorList.length;
@@ -1086,9 +1085,7 @@ export default function ActivityFeed({
                                     className={`flex items-center gap-1.5 py-1 px-2.5 rounded-full text-[10px] font-extrabold border transition-all duration-150 active:scale-95 hover:scale-105 cursor-pointer select-none ${
                                       hasReacted
                                         ? `${react.activeClass} font-black`
-                                        : count > 0
-                                        ? react.unselectedClass
-                                        : ghostClass
+                                        : react.unselectedClass
                                     }`}
                                   >
                                     <span className="text-[12px]">{react.emoji}</span>
