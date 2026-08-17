@@ -7,6 +7,7 @@ import ActivityFeed from "./components/ActivityFeed";
 import Statistics from "./components/Statistics";
 import UserProfileManager from "./components/UserProfileManager";
 import LoginScreen from "./components/LoginScreen";
+import AgeGate from "./components/AgeGate";
 import PubHub from "./components/PubHub";
 import QuickLogWorkflow from "./components/QuickLogWorkflow";
 import UserAvatar from "./components/UserAvatar";
@@ -16,6 +17,9 @@ import { db, useFirestore } from "./firebase";
 import { collection, query, orderBy, limit, onSnapshot, getDocs, startAfter, where, QueryConstraint, disableNetwork } from "firebase/firestore";
 
 export default function App() {
+  const [ageVerified, setAgeVerified] = useState<boolean>(() => {
+    return localStorage.getItem("beer_real_age_verified") === "true";
+  });
   const [activeTab, setActiveTab] = useState<"pubs" | "feed" | "stats">("feed");
   const [logs, setLogs] = useState<BeerLog[]>([]);
   const [liveBeers, setLiveBeers] = useState<BeerLog[]>([]);
@@ -1407,6 +1411,17 @@ export default function App() {
       return "";
     }
   };
+
+  if (!ageVerified) {
+    return (
+      <AgeGate
+        onVerified={() => {
+          localStorage.setItem("beer_real_age_verified", "true");
+          setAgeVerified(true);
+        }}
+      />
+    );
+  }
 
   if (loading) {
     return (
