@@ -63,13 +63,14 @@ function getDayDifference(dateStr1: string, dateStr2: string): number {
   return Math.round(diffTime / (1000 * 60 * 60 * 24));
 }
 
-function StatChip({ label, value, emoji, colorClass }: { label: string; value: string | number; emoji: string; colorClass: string }) {
+function StatChip({ label, value, emoji, colorClass, title }: { label: string; value: string | number; emoji: string; colorClass: string; title?: string }) {
+  const isWordy = typeof value === "string" && value.length > 4;
   return (
-    <div className={`rounded-xl p-2.5 flex flex-col items-center justify-center text-center border ${colorClass}`}>
+    <div className={`rounded-xl p-2.5 flex flex-col items-center justify-center text-center border ${colorClass}`} title={title}>
       <span className="text-[8px] font-bold uppercase tracking-wider opacity-70">{label}</span>
-      <span className="text-base font-black mt-0.5 flex items-center gap-1">
-        <span>{emoji}</span>
-        <span>{value}</span>
+      <span className={`font-black mt-0.5 flex items-center gap-1 ${isWordy ? "text-[11px] flex-col gap-0" : "text-base"}`}>
+        <span className={isWordy ? "text-base" : ""}>{emoji}</span>
+        <span className="leading-tight">{value}</span>
       </span>
     </div>
   );
@@ -110,8 +111,10 @@ export default function UserProfileManager({
     avgRating: string;
     favoriteStyle: string;
     totalCheers: number;
-    stylesTried: number;
-    pubsVisited: number;
+    theUsualBeerName: string;
+    theUsualCount: number;
+    goldenHourLabel: string;
+    goldenHourEmoji: string;
     firstPourCount: number;
     longestDryStreak: number;
     currentDryStreak: number;
@@ -409,8 +412,10 @@ export default function UserProfileManager({
             avgRating: data.avgRating,
             favoriteStyle: data.favoriteStyle,
             totalCheers: data.totalCheers,
-            stylesTried: data.stylesTried || 0,
-            pubsVisited: data.pubsVisited || 0,
+            theUsualBeerName: data.theUsualBeerName || "",
+            theUsualCount: data.theUsualCount || 0,
+            goldenHourLabel: data.goldenHourLabel || "TBD",
+            goldenHourEmoji: data.goldenHourEmoji || "🕐",
             firstPourCount: data.firstPourCount || 0,
             longestDryStreak: data.longestDryStreak || 0,
             currentDryStreak: data.currentDryStreak || 0
@@ -713,16 +718,17 @@ export default function UserProfileManager({
                         value={profileStats.firstPourCount}
                       />
                       <StatChip
-                        label="Styles Tried"
-                        emoji="🎨"
+                        label="The Usual"
+                        emoji="🔁"
                         colorClass="bg-orange-50 border-orange-100 text-orange-700"
-                        value={profileStats.stylesTried}
+                        value={profileStats.theUsualCount > 0 ? `${profileStats.theUsualCount}×` : "—"}
+                        title={profileStats.theUsualBeerName ? `Your usual: ${profileStats.theUsualBeerName}` : undefined}
                       />
                       <StatChip
-                        label="Pubs Visited"
-                        emoji="🗺️"
+                        label="Golden Hour"
+                        emoji={profileStats.goldenHourEmoji}
                         colorClass="bg-emerald-50 border-emerald-100 text-emerald-700"
-                        value={profileStats.pubsVisited}
+                        value={profileStats.goldenHourLabel}
                       />
                       <StatChip
                         label="Longest Dry"

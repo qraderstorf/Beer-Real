@@ -43,8 +43,10 @@ export interface UserProfile {
     avgRating: string;
     favoriteStyle: string;
     totalCheers: number;
-    stylesTried: number;
-    pubsVisited: number;
+    theUsualBeerName: string;
+    theUsualCount: number;
+    goldenHourLabel: string;
+    goldenHourEmoji: string;
     firstPourCount: number;
     longestDryStreak: number;
     currentDryStreak: number;

@@ -884,6 +884,35 @@ function getDayDifference(dateStr1: string, dateStr2: string): number {
   return Math.round(diffTime / (1000 * 60 * 60 * 24));
 }
 
+function getLocalHour(dateInput: Date | string | number, timeZone: string): number {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', { timeZone, hour: 'numeric', hour12: false });
+    const hourPart = formatter.formatToParts(new Date(dateInput)).find(p => p.type === 'hour')?.value;
+    const hour = hourPart ? parseInt(hourPart, 10) : new Date(dateInput).getHours();
+    return hour === 24 ? 0 : hour;
+  } catch (e) {
+    return new Date(dateInput).getHours();
+  }
+}
+
+// "Golden Hour" time-of-day buckets - a fun personality label instead of a raw
+// activity count. Ranges are in a 5am-29am (i.e. wraps past midnight) scale so
+// the graveyard-shift hours (11pm-5am) group into one "Night Owl" bucket.
+const GOLDEN_HOUR_BUCKETS: { start: number; end: number; label: string; emoji: string }[] = [
+  { start: 5, end: 11, label: "Early Bird", emoji: "🌅" },
+  { start: 11, end: 14, label: "Lunch Breaker", emoji: "🥪" },
+  { start: 14, end: 17, label: "Afternoon Sipper", emoji: "☀️" },
+  { start: 17, end: 20, label: "Happy Hour", emoji: "🍻" },
+  { start: 20, end: 23, label: "Evening Regular", emoji: "🌆" },
+  { start: 23, end: 29, label: "Night Owl", emoji: "🦉" },
+];
+
+function getGoldenHourBucket(hour: number): { label: string; emoji: string } {
+  const normalizedHour = hour < 5 ? hour + 24 : hour;
+  const bucket = GOLDEN_HOUR_BUCKETS.find((b) => normalizedHour >= b.start && normalizedHour < b.end);
+  return bucket || GOLDEN_HOUR_BUCKETS[GOLDEN_HOUR_BUCKETS.length - 1];
+}
+
 // Recalculate and cache stats for a user
 async function recalculateAndCacheUserStats(username: string): Promise<any> {
   const allBeersList = await getAllBeers();
@@ -922,9 +951,40 @@ async function recalculateAndCacheUserStats(username: string): Promise<any> {
   );
   const timeZone = (existingUser && (existingUser as any).timezone) || "America/Los_Angeles";
 
-  // Positive stats: variety and exploration rather than drinking frequency.
-  const stylesTried = Object.keys(styleCounts).length;
-  const pubsVisited = new Set(userLogs.map((l) => l.pubId).filter(Boolean)).size;
+  // "The Usual" - your single most-repeated beer, a little personality fact
+  // rather than a raw activity count.
+  const beerNameCounts: Record<string, number> = {};
+  userLogs.forEach((l) => {
+    const name = (l.beerName || "").trim();
+    if (!name) return;
+    beerNameCounts[name] = (beerNameCounts[name] || 0) + 1;
+  });
+  let theUsualBeerName = "";
+  let theUsualCount = 0;
+  Object.entries(beerNameCounts).forEach(([name, count]) => {
+    if (count > theUsualCount) {
+      theUsualBeerName = name;
+      theUsualCount = count;
+    }
+  });
+
+  // "Golden Hour" - the time-of-day bucket they check in during most often.
+  const goldenHourCounts: Record<string, number> = {};
+  userLogs.forEach((l) => {
+    const bucket = getGoldenHourBucket(getLocalHour(l.date, timeZone));
+    goldenHourCounts[bucket.label] = (goldenHourCounts[bucket.label] || 0) + 1;
+  });
+  let goldenHourLabel = "TBD";
+  let goldenHourEmoji = "🕐";
+  let maxGoldenHourCount = 0;
+  Object.entries(goldenHourCounts).forEach(([label, count]) => {
+    if (count > maxGoldenHourCount) {
+      maxGoldenHourCount = count;
+      goldenHourLabel = label;
+      goldenHourEmoji = GOLDEN_HOUR_BUCKETS.find((b) => b.label === label)?.emoji || "🕐";
+    }
+  });
+
   const firstPourCount = userLogs.filter((l) => l.isFirstOfDay).length;
 
   // Dry-streak calculations only - no "drinking streak" is tracked or surfaced,
@@ -975,8 +1035,10 @@ async function recalculateAndCacheUserStats(username: string): Promise<any> {
     avgRating,
     favoriteStyle,
     totalCheers,
-    stylesTried,
-    pubsVisited,
+    theUsualBeerName,
+    theUsualCount,
+    goldenHourLabel,
+    goldenHourEmoji,
     firstPourCount,
     longestDryStreak,
     currentDryStreak
