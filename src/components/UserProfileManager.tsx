@@ -732,13 +732,14 @@ export default function UserProfileManager({
                       />
                       <StatChip
                         label="Longest Dry"
-                        emoji="🐪"
+                        emoji="🏛️"
                         colorClass="bg-sky-50 border-sky-100 text-sky-700"
                         value={`${profileStats.longestDryStreak}d`}
+                        title="My Body Is A Temple - your longest streak on record"
                       />
                       <StatChip
                         label="Current Dry"
-                        emoji="🌵"
+                        emoji="🧘"
                         colorClass="bg-cyan-50 border-cyan-100 text-cyan-700"
                         value={`${profileStats.currentDryStreak}d`}
                       />

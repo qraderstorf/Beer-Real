@@ -334,6 +334,7 @@ export default function Statistics({
   const [isCompareDropdownOpen, setIsCompareDropdownOpen] = useState(false);
   const LEADERBOARD_PAGE_SIZE = 5;
   const [leaderboardVisibleCount, setLeaderboardVisibleCount] = useState(LEADERBOARD_PAGE_SIZE);
+  const [templeVisibleCount, setTempleVisibleCount] = useState(LEADERBOARD_PAGE_SIZE);
 
   // Derive selectedUsers from filteredUsers, filteredPubLogs, and excludedUsers
   const selectedUsers = useMemo(() => {
@@ -353,7 +354,19 @@ export default function Statistics({
   // Reset leaderboard pagination whenever the underlying ranking could change
   useEffect(() => {
     setLeaderboardVisibleCount(LEADERBOARD_PAGE_SIZE);
+    setTempleVisibleCount(LEADERBOARD_PAGE_SIZE);
   }, [selectedPubId, rangeFilter]);
+
+  // "My Body Is A Temple" - ranks by longest dry streak on record (all-time,
+  // not scoped to the date-range filter, since a streak is a running record
+  // rather than something that resets each week/month). Pulled straight from
+  // each profile's cached stats rather than recomputed from logs here.
+  const templeLeaderboardData = useMemo(() => {
+    return filteredUsers
+      .map((u) => ({ username: u.username, longestDryStreak: u.stats?.longestDryStreak || 0 }))
+      .filter((u) => u.longestDryStreak > 0)
+      .sort((a, b) => b.longestDryStreak - a.longestDryStreak);
+  }, [filteredUsers]);
 
   const [tableSearch, setTableSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("date");
@@ -1198,6 +1211,107 @@ export default function Statistics({
             )}
             <span className="text-[10px] text-slate-400 font-bold">
               {Math.min(leaderboardVisibleCount, userComparisonData.length)} of {userComparisonData.length}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* My Body Is A Temple Leaderboard - longest dry streak on record */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4" id="temple-leaderboard-card">
+        <div className="border-b border-slate-100 pb-3.5 flex justify-between items-center">
+          <div>
+            <h3 className="text-sm font-extrabold text-slate-800 tracking-tight flex items-center gap-1.5">
+              <span className="text-base">🏛️</span>
+              My Body Is A Temple
+            </h3>
+            <p className="text-[11px] text-slate-400 mt-0.5 font-normal">Longest dry streak on record - the longest stretch between pints</p>
+          </div>
+          <span className="text-[10px] text-emerald-600 font-extrabold bg-emerald-50 border border-emerald-200/50 px-2.5 py-1 rounded-full uppercase tracking-wider">
+            All-Time Record
+          </span>
+        </div>
+
+        {templeLeaderboardData.length === 0 ? (
+          <div className="py-12 text-center text-slate-400 italic">No dry streaks on record yet</div>
+        ) : (
+          <div className="space-y-3">
+            {templeLeaderboardData.slice(0, templeVisibleCount).map((entry, idx) => {
+              const maxStreak = Math.max(...templeLeaderboardData.map((u) => u.longestDryStreak), 1);
+              const percentage = (entry.longestDryStreak / maxStreak) * 100;
+              const rank = idx + 1;
+
+              const getRankBadge = (r: number) => {
+                if (r === 1) return <span className="flex items-center justify-center w-7 h-7 rounded-full bg-yellow-100 text-yellow-600 font-extrabold text-sm shadow-sm border border-yellow-300/80 animate-bounce-slow">🥇</span>;
+                if (r === 2) return <span className="flex items-center justify-center w-7 h-7 rounded-full bg-slate-100 text-slate-600 font-extrabold text-sm shadow-sm border border-slate-300">🥈</span>;
+                if (r === 3) return <span className="flex items-center justify-center w-7 h-7 rounded-full bg-amber-700/10 text-amber-800 font-extrabold text-sm shadow-sm border border-amber-700/30">🥉</span>;
+                return <span className="flex items-center justify-center w-7 h-7 rounded-full bg-slate-50 text-slate-400 font-extrabold text-xs border border-slate-200">#{r}</span>;
+              };
+
+              const getRowStyles = (r: number) => {
+                if (r === 1) return "border-emerald-300/50 bg-gradient-to-r from-emerald-50/40 via-teal-50/15 to-transparent hover:from-emerald-50/50 hover:via-teal-50/25";
+                if (r === 2) return "border-slate-250 bg-gradient-to-r from-slate-50/40 to-transparent hover:from-slate-50/60";
+                if (r === 3) return "border-orange-200/40 bg-gradient-to-r from-orange-50/10 to-transparent hover:from-orange-50/20";
+                return "border-slate-150 bg-slate-50/10 hover:bg-slate-50";
+              };
+
+              return (
+                <div
+                  key={entry.username}
+                  className={`group flex items-center gap-4 p-3.5 border rounded-xl transition-all duration-200 hover:shadow-sm cursor-pointer ${getRowStyles(rank)}`}
+                  onClick={() => onViewProfileRequested?.(entry.username)}
+                >
+                  <div className="flex items-center gap-3 shrink-0 w-44 sm:w-52">
+                    <div className="shrink-0">{getRankBadge(rank)}</div>
+                    <UserAvatar username={entry.username} users={filteredUsers} className="w-9 h-9 text-lg" />
+                    <div className="min-w-0">
+                      <h4 className="font-extrabold text-slate-800 text-xs truncate group-hover:underline">{entry.username}</h4>
+                      <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider truncate">Clean Streak</p>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 min-w-0 flex flex-col justify-center">
+                    <div className="w-full bg-slate-200/70 h-2 rounded-full overflow-hidden relative">
+                      <div
+                        className="h-full rounded-full transition-all duration-500 ease-out bg-emerald-500"
+                        style={{ width: `${percentage}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="text-right min-w-[70px] shrink-0">
+                    <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wider">Dry Streak</span>
+                    <span className="font-extrabold text-emerald-600 text-sm">
+                      {entry.longestDryStreak}d
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {(templeLeaderboardData.length > templeVisibleCount || templeVisibleCount > LEADERBOARD_PAGE_SIZE) && (
+          <div className="flex items-center justify-center gap-3 pt-1 flex-wrap">
+            {templeLeaderboardData.length > templeVisibleCount && (
+              <button
+                type="button"
+                onClick={() => setTempleVisibleCount((c) => Math.min(c + LEADERBOARD_PAGE_SIZE, templeLeaderboardData.length))}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-extrabold rounded-lg transition-all cursor-pointer"
+              >
+                Show {Math.min(LEADERBOARD_PAGE_SIZE, templeLeaderboardData.length - templeVisibleCount)} More
+              </button>
+            )}
+            {templeVisibleCount > LEADERBOARD_PAGE_SIZE && (
+              <button
+                type="button"
+                onClick={() => setTempleVisibleCount(LEADERBOARD_PAGE_SIZE)}
+                className="px-4 py-2 bg-transparent hover:bg-slate-100 text-slate-500 text-xs font-extrabold rounded-lg transition-all cursor-pointer border border-slate-200"
+              >
+                Show Less
+              </button>
+            )}
+            <span className="text-[10px] text-slate-400 font-bold">
+              {Math.min(templeVisibleCount, templeLeaderboardData.length)} of {templeLeaderboardData.length}
             </span>
           </div>
         )}
