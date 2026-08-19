@@ -646,34 +646,67 @@ export default function ActivityFeed({
     });
   };
 
-  // Helper to get the exact time string
-  const getExactTimeStr = (isoString: string) => {
+  // Helper to get the exact time string, in the POSTER's local timezone (not
+  // the viewer's) when we captured one at check-in time - e.g. "3:45 PM EST"
+  // for a friend on the east coast even if you're viewing from California.
+  // Falls back to the viewer's own local time for older logs with no stored
+  // timezone.
+  const getExactTimeStr = (isoString: string, timezone?: string) => {
     const d = new Date(isoString);
     if (isNaN(d.getTime())) return "";
-    return d.toLocaleTimeString(undefined, {
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true
-    });
+    if (!timezone) {
+      return d.toLocaleTimeString(undefined, {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true
+      });
+    }
+    try {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: timezone,
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+        timeZoneName: "short"
+      }).formatToParts(d);
+      const hour = parts.find((p) => p.type === "hour")?.value || "";
+      const minute = parts.find((p) => p.type === "minute")?.value || "";
+      const dayPeriod = parts.find((p) => p.type === "dayPeriod")?.value || "";
+      const tzName = parts.find((p) => p.type === "timeZoneName")?.value || "";
+      return [`${hour}:${minute} ${dayPeriod}`, tzName].filter(Boolean).join(" ");
+    } catch (e) {
+      return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", hour12: true });
+    }
   };
 
   // Helper to determine if a date is "after midnight" (12:00 AM to 4:59 AM)
-  const isAfterMidnight = (isoString: string) => {
+  // in the POSTER's local time, not the viewer's.
+  const isAfterMidnight = (isoString: string, timezone?: string) => {
     const d = new Date(isoString);
     if (isNaN(d.getTime())) return false;
-    const hours = d.getHours();
-    return hours >= 0 && hours < 5;
+    if (!timezone) {
+      const hours = d.getHours();
+      return hours >= 0 && hours < 5;
+    }
+    try {
+      const hourPart = new Intl.DateTimeFormat("en-US", { timeZone: timezone, hour: "numeric", hour12: false }).formatToParts(d).find((p) => p.type === "hour")?.value;
+      const hours = hourPart ? parseInt(hourPart, 10) % 24 : d.getHours();
+      return hours >= 0 && hours < 5;
+    } catch (e) {
+      const hours = d.getHours();
+      return hours >= 0 && hours < 5;
+    }
   };
 
   // Helper to format date with its exact time
-  const formatBeerDateWithTime = (isoString: string) => {
+  const formatBeerDateWithTime = (isoString: string, timezone?: string) => {
     const baseDate = formatBeerDate(isoString);
-    const timeStr = getExactTimeStr(isoString);
+    const timeStr = getExactTimeStr(isoString, timezone);
     if (!timeStr) return baseDate;
-    
+
     if (baseDate === "Just now") return `Just now (${timeStr})`;
     if (baseDate.endsWith("ago")) return `${baseDate} (${timeStr})`;
-    
+
     return `${baseDate} at ${timeStr}`;
   };
 
@@ -886,9 +919,9 @@ export default function ActivityFeed({
                         </div>
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">
-                            {formatBeerDateWithTime(log.date)}
+                            {formatBeerDateWithTime(log.date, log.timezone)}
                           </p>
-                          {isAfterMidnight(log.date) && (
+                          {isAfterMidnight(log.date, log.timezone) && (
                             <span className="bg-violet-500/10 text-violet-600 dark:text-violet-400 font-black px-1.5 py-0.5 rounded text-[8px] uppercase tracking-widest border border-violet-500/20">
                               🦉 Night Owl
                             </span>

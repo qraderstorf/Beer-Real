@@ -723,7 +723,16 @@ export default function PubHub({
           const d = new Date(log.date);
           if (!isNaN(d.getTime())) {
             activeDates.add(d.toISOString().split("T")[0]);
-            const hour = d.getHours();
+            // Use the poster's own local hour (captured at check-in time), not
+            // the viewer's - a friend's 11pm pint should count as late-night
+            // even if you're looking at it the next morning from another zone.
+            let hour = d.getHours();
+            if (log.timezone) {
+              try {
+                const hourPart = new Intl.DateTimeFormat("en-US", { timeZone: log.timezone, hour: "numeric", hour12: false }).formatToParts(d).find((p) => p.type === "hour")?.value;
+                if (hourPart) hour = parseInt(hourPart, 10) % 24;
+              } catch (e) {}
+            }
             if (hour >= 22 || hour < 5) lateNightCount++;
             if (hour >= 10 && hour < 15) earlyCount++;
           }

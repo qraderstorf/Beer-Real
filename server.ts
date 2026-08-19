@@ -884,6 +884,16 @@ function getDayDifference(dateStr1: string, dateStr2: string): number {
   return Math.round(diffTime / (1000 * 60 * 60 * 24));
 }
 
+function isValidTimeZone(timeZone: any): timeZone is string {
+  if (!timeZone || typeof timeZone !== "string") return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone });
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 function getLocalHour(dateInput: Date | string | number, timeZone: string): number {
   try {
     const formatter = new Intl.DateTimeFormat('en-US', { timeZone, hour: 'numeric', hour12: false });
@@ -949,7 +959,15 @@ async function recalculateAndCacheUserStats(username: string): Promise<any> {
   const existingUser = allUsersList.find(
     (u) => u.username.toLowerCase() === username.toLowerCase()
   );
-  const timeZone = (existingUser && (existingUser as any).timezone) || "America/Los_Angeles";
+
+  // Each check-in carries the poster's own timezone (captured client-side at
+  // log time), so date/hour bucketing below uses that per-log zone rather
+  // than a single blanket one - correct even for someone who travels. Falls
+  // back to a fixed default only for logs from before this was tracked.
+  const DEFAULT_TIMEZONE = "America/Los_Angeles";
+  const zoneFor = (l: BeerLog) => l.timezone || DEFAULT_TIMEZONE;
+  const mostRecentLog = [...userLogs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+  const currentZone = mostRecentLog ? zoneFor(mostRecentLog) : DEFAULT_TIMEZONE;
 
   // "The Usual" - your single most-repeated beer, a little personality fact
   // rather than a raw activity count.
@@ -971,7 +989,7 @@ async function recalculateAndCacheUserStats(username: string): Promise<any> {
   // "Golden Hour" - the time-of-day bucket they check in during most often.
   const goldenHourCounts: Record<string, number> = {};
   userLogs.forEach((l) => {
-    const bucket = getGoldenHourBucket(getLocalHour(l.date, timeZone));
+    const bucket = getGoldenHourBucket(getLocalHour(l.date, zoneFor(l)));
     goldenHourCounts[bucket.label] = (goldenHourCounts[bucket.label] || 0) + 1;
   });
   let goldenHourLabel = "TBD";
@@ -990,22 +1008,23 @@ async function recalculateAndCacheUserStats(username: string): Promise<any> {
   // Dry-streak calculations only - no "drinking streak" is tracked or surfaced,
   // since rewarding consecutive days of drinking is exactly the kind of pattern
   // that encourages excessive/habitual alcohol use.
-  const loggedLocalDates = userLogs.map((l) => getLocalDateString(l.date, timeZone));
+  const loggedLocalDates = userLogs.map((l) => getLocalDateString(l.date, zoneFor(l)));
   const uniqueDates = Array.from(new Set(loggedLocalDates)).sort();
 
   let longestDryStreak = 0;
   let currentDryStreak = 0;
 
   if (uniqueDates.length > 0) {
-    // 1. Today Status
-    const todayStr = getLocalDateString(new Date(), timeZone);
+    // 1. Today Status - "today" is judged from the zone of their most recent
+    // check-in, our best guess at where they currently are.
+    const todayStr = getLocalDateString(new Date(), currentZone);
     const hasLogToday = uniqueDates.includes(todayStr);
 
     // 2. Current Dry Streak (0 if they've already logged today)
     if (!hasLogToday) {
       let checkDate = new Date(todayStr + "T12:00:00");
       while (true) {
-        const checkDateStr = getLocalDateString(checkDate, timeZone);
+        const checkDateStr = getLocalDateString(checkDate, currentZone);
         if (!uniqueDates.includes(checkDateStr)) {
           currentDryStreak++;
           checkDate.setDate(checkDate.getDate() - 1);
@@ -2175,7 +2194,7 @@ app.post("/api/beers", async (req, res) => {
   try {
     const rawUser = (req.body.user || "Anonymous").toString().trim();
     const user = rawUser || "Anonymous";
-    const { beerName, beerStyle, abv, date, rating, comment, imageUrl, hadCig, pubId } = req.body;
+    const { beerName, beerStyle, abv, date, rating, comment, imageUrl, hadCig, pubId, timezone } = req.body;
 
     if (!user || !beerName || !beerStyle || abv === undefined || !date || rating === undefined) {
       res.status(400).json({ error: "Missing required fields" });
@@ -2204,7 +2223,8 @@ app.post("/api/beers", async (req, res) => {
       comment: comment || "",
       imageUrl: processedImageUrl,
       hadCig: !!hadCig,
-      pubId: pubId || undefined
+      pubId: pubId || undefined,
+      timezone: isValidTimeZone(timezone) ? timezone : undefined
     };
 
     const saved = await saveBeerLog(newLog);

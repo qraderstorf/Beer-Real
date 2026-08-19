@@ -212,6 +212,7 @@ export default function QuickLogWorkflow({
       imageUrl: shortImageUrl,
       hadCig: false,
       date: new Date().toISOString(),
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       pubId: selectedPubId && selectedPubId !== "global" && selectedPubId !== "all" ? selectedPubId : undefined,
     };
 
@@ -276,6 +277,7 @@ export default function QuickLogWorkflow({
         imageUrl: shortImageUrl || undefined,
         hadCig: hadCig,
         date: new Date().toISOString(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         pubId: selectedPubId && selectedPubId !== "global" && selectedPubId !== "all" ? selectedPubId : undefined,
       };
 
