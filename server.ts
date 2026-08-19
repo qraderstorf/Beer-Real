@@ -1128,8 +1128,14 @@ async function getAllBeers(): Promise<BeerLog[]> {
   
   if (firestore && useFirestore) {
     try {
+      // This is the single source of truth every other beer-related feature
+      // reads from (the feed, per-user stats, leaderboards, Pub Awards...),
+      // so capping it silently truncates "all time" everywhere at once once
+      // the community logs more pints than the limit - not just the visible
+      // feed. 5000 gives a lot of headroom over today's real count (~250)
+      // while still bounding the read/sort cost of every request.
       const beersColl = collection(firestore, "beers");
-      const q = query(beersColl, orderBy("date", "desc"), limit(200));
+      const q = query(beersColl, orderBy("date", "desc"), limit(5000));
       const snap = await getDocs(q);
       snap.forEach((docSnap) => {
         list.push(docSnap.data() as BeerLog);
