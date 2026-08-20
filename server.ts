@@ -4,6 +4,7 @@ import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { BeerLog, UserProfile, AppNotification, Pub, PubChatMessage, ContentReport } from "./src/types";
 import { normalizeBeerName } from "./src/data/beerCatalog";
+import { isImposterLog } from "./src/utils";
 import { initializeApp } from "firebase/app";
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, orderBy, where, writeBatch, limit, onSnapshot, runTransaction } from "firebase/firestore";
 import { getStorage, ref, uploadString, getDownloadURL } from "firebase/storage";
@@ -927,9 +928,7 @@ function getGoldenHourBucket(hour: number): { label: string; emoji: string } {
 async function recalculateAndCacheUserStats(username: string): Promise<any> {
   const allBeersList = await getAllBeers();
   const userLogs = allBeersList.filter(
-    (l) => l.user.toLowerCase() === username.toLowerCase() &&
-      (!l.reactions?.dislike || l.reactions.dislike.length < 3) &&
-      (!l.reactions?.imposter || l.reactions.imposter.length < 3)
+    (l) => l.user.toLowerCase() === username.toLowerCase() && !isImposterLog(l)
   );
 
   const totalPints = userLogs.length;
@@ -2284,8 +2283,11 @@ app.post("/api/beers", async (req, res) => {
 
         // 2. First Pour of the Day - whoever is first (across ALL users) to check
         // in each calendar day gets a fun, positive callout. Unlike the old
-        // "bender alert" this rewards being early, not drinking a lot.
-        const otherLogsSameDay = allBeersList.filter(
+        // "bender alert" this rewards being early, not drinking a lot. Posts
+        // the community has flagged as fake (3+ Imposter Pint votes) don't
+        // count toward this - or anything else below.
+        const legitBeersList = allBeersList.filter((l) => !isImposterLog(l));
+        const otherLogsSameDay = legitBeersList.filter(
           (l) => l.id !== saved.id && l.date.split("T")[0] === checkInDateStr
         );
         const isFirstOfDay = otherLogsSameDay.every(
@@ -2293,7 +2295,7 @@ app.post("/api/beers", async (req, res) => {
         );
 
         // 3. New Style Unlocked - first time this user has logged this beer style.
-        const priorStyleLogs = allBeersList.filter(
+        const priorStyleLogs = legitBeersList.filter(
           (l) => l.id !== saved.id &&
             l.user === saved.user &&
             (l.beerStyle || "").toLowerCase() === (saved.beerStyle || "").toLowerCase()
