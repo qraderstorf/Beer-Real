@@ -571,21 +571,21 @@ async function sendFCMNotification(targetUser: string | null, title: string, bod
     for (const token of tokens) {
       const message = {
         token: token,
+        // Data-only payload (no top-level/webpush "notification" block): the FCM Web SDK
+        // auto-displays a notification whenever a message carries a "notification" payload,
+        // and our service worker's onBackgroundMessage handler ALSO calls showNotification()
+        // for every background message - together those caused every push to render twice.
+        // Keeping this data-only means only our own SW handler shows it, exactly once.
         data: {
           click_action: "/",
+          title: title,
+          body: body,
           ...payload
         },
         webpush: {
           headers: {
             Urgency: "high",
             TTL: "86400"
-          },
-          notification: {
-            title: title,
-            body: body,
-            icon: "/icon-192.png",
-            badge: "/icon-192.png",
-            tag: payload.notificationId || payload.id || "beerreal-notif"
           },
           fcm_options: {
             link: "/"
@@ -668,18 +668,13 @@ async function sendFcmPushForNotification(notif: AppNotification) {
         for (const token of recipientTokens) {
           const message = {
             token: token,
-            data: { click_action: "/", notificationId: notif.id, type: notif.type },
+            // Data-only payload - see comment in sendFCMNotification() above for why we don't
+            // also set a webpush "notification" block (it caused every push to show twice).
+            data: { click_action: "/", notificationId: notif.id, type: notif.type || "", title, body },
             webpush: {
               headers: {
                 Urgency: "high",
                 TTL: "86400"
-              },
-              notification: {
-                title,
-                body,
-                icon: "/icon.svg",
-                badge: "/icon.svg",
-                tag: notif.id
               },
               fcm_options: {
                 link: "/"
