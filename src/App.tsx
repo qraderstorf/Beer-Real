@@ -288,11 +288,27 @@ export default function App() {
 
       // 3. Save FCM token to server if a valid token or endpoint was retrieved
       if (token) {
+        // FCM can hand this device a rotated token (reload, cache clear, SW update, etc.)
+        // without the old one ever stopping - it stays valid and keeps receiving pushes
+        // unless we explicitly tell the server to drop it. Left unchecked this piles up
+        // stale-but-live tokens for the same device, so every notification arrives once
+        // per leftover token instead of once. Track our own last-registered token per
+        // device and unregister it whenever it's superseded by a new value.
+        const lastTokenKey = "beer_logger_last_fcm_token";
+        const previousToken = localStorage.getItem(lastTokenKey);
+        if (previousToken && previousToken !== token) {
+          fetch("/api/unregister-fcm-token", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token: previousToken })
+          }).catch(() => {});
+        }
         await fetch("/api/register-fcm-token", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ token, user: currentUser })
         });
+        localStorage.setItem(lastTokenKey, token);
       }
       return token;
     } catch (err) {

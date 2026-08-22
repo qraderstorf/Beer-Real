@@ -2169,6 +2169,25 @@ app.post("/api/register-fcm-token", async (req, res) => {
   }
 });
 
+// POST Unregister an old/rotated FCM token (called by the client right before it registers a
+// freshly-rotated token for the same device, so stale tokens don't pile up and cause duplicate
+// push notifications - a device's old token stays valid until explicitly removed, it does not
+// automatically stop working just because a newer token was issued for the same install).
+app.post("/api/unregister-fcm-token", async (req, res) => {
+  const { token } = req.body;
+  if (!token) {
+    res.status(400).json({ error: "token is required" });
+    return;
+  }
+  try {
+    await removeFcmToken(token);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("[FCM Server] Failed to unregister token:", err);
+    res.status(500).json({ error: "Failed to unregister token" });
+  }
+});
+
 // POST Send Test Push
 app.post("/api/send-test-push", async (req, res) => {
   const { user } = req.body;
