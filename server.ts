@@ -10,6 +10,7 @@ import { getFirestore, collection, doc, getDoc, getDocs, setDoc, deleteDoc, quer
 import { getStorage, ref, uploadString, getDownloadURL } from "firebase/storage";
 import { initializeApp as initializeAdminApp, getApps as getAdminApps, applicationDefault, cert } from "firebase-admin/app";
 import { getMessaging } from "firebase-admin/messaging";
+import { getStorage as getAdminStorage } from "firebase-admin/storage";
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -72,14 +73,35 @@ async function saveBase64ToStorage(base64Data: string): Promise<string> {
   if (!base64Data.startsWith("data:image/")) {
     return base64Data; // Already a URL or empty
   }
-  try {
-    const matches = base64Data.match(/^data:image\/([a-zA-Z0-9-+.]+);base64,(.+)$/);
-    if (!matches || matches.length !== 3) return base64Data;
-    const ext = matches[1] === "jpeg" ? "jpg" : matches[1] || "jpg";
+  const matches = base64Data.match(/^data:image\/([a-zA-Z0-9-+.]+);base64,(.+)$/);
+  if (!matches || matches.length !== 3) return base64Data;
+  const ext = matches[1] === "jpeg" ? "jpg" : matches[1] || "jpg";
+  const filename = `photos/photo-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${ext}`;
 
+  // Prefer the Admin SDK: it writes with the server's privileged service-account
+  // credentials and bypasses Firebase Storage Security Rules entirely, so uploads
+  // can't be broken by a rules change the way the unauthenticated client SDK call
+  // below can (and was - this is why some images stopped uploading: the client SDK
+  // path started getting storage/unauthorized and silently falling back to saving
+  // the photo on local disk, which Cloud Run wipes on every redeploy).
+  if (getAdminApps().length > 0) {
+    try {
+      const buffer = Buffer.from(matches[2], "base64");
+      const bucket = getAdminStorage().bucket();
+      const file = bucket.file(filename);
+      await file.save(buffer, { metadata: { contentType: `image/${matches[1]}` } });
+      await file.makePublic();
+      const publicUrl = file.publicUrl();
+      console.log(`[Storage] Uploaded base64 (${base64Data.length} chars) via Admin SDK: ${publicUrl}`);
+      return publicUrl;
+    } catch (adminErr) {
+      console.warn("[Storage] Admin SDK upload failed, trying client SDK:", adminErr);
+    }
+  }
+
+  try {
     const storage = getStorageInstance();
     if (storage) {
-      const filename = `photos/photo-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${ext}`;
       const storageRef = ref(storage, filename);
       await uploadString(storageRef, base64Data, "data_url");
       const downloadUrl = await getDownloadURL(storageRef);
@@ -438,6 +460,7 @@ try {
     const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
     initializeAdminApp({
       projectId: config.projectId,
+      storageBucket: config.storageBucket,
       credential: credentialToUse
     });
     fcmAvailable = true;
