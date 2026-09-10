@@ -3060,6 +3060,29 @@ app.post("/api/friends/decline", async (req, res) => {
   res.json({ status: "declined", users: [userProfile] });
 });
 
+// POST Cancel a Friend Request I Sent
+app.post("/api/friends/cancel", async (req, res) => {
+  const user = (req.body.user || "").toString().trim();
+  const target = (req.body.target || "").toString().trim();
+
+  if (!user || !target) {
+    res.status(400).json({ error: "Both 'user' and 'target' usernames are required." });
+    return;
+  }
+
+  const allUsers = await getAllUsers();
+  const targetProfile = allUsers.find((u) => u.username.toLowerCase() === target.toLowerCase());
+  if (!targetProfile) {
+    res.status(404).json({ error: "User not found." });
+    return;
+  }
+
+  targetProfile.friendRequests = (targetProfile.friendRequests || []).filter((r) => r.toLowerCase() !== user.toLowerCase());
+  await saveUser(targetProfile);
+
+  res.json({ status: "cancelled", users: [targetProfile] });
+});
+
 // POST Remove Friend
 app.post("/api/friends/remove", async (req, res) => {
   const user = (req.body.user || "").toString().trim();

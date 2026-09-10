@@ -114,9 +114,22 @@ export default function FriendsHub({
       applyResult(data);
     });
 
+  const cancelRequest = (target: string) =>
+    runAction(`cancel-${target}`, async () => {
+      const res = await fetch("/api/friends/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user: currentUser, target }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not cancel friend request.");
+      applyResult(data);
+    });
+
+  const [confirmRemoveTarget, setConfirmRemoveTarget] = useState<string | null>(null);
+
   const removeFriend = (friend: string) =>
     runAction(`remove-${friend}`, async () => {
-      if (!window.confirm(`Remove @${friend} as a friend?`)) return;
       const res = await fetch("/api/friends/remove", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -206,48 +219,93 @@ export default function FriendsHub({
       <div className="px-3.5 sm:px-4 pb-3.5 sm:pb-4">
         {/* REQUESTS TAB */}
         {tab === "requests" && (
-          <div className="space-y-2">
-            {myIncomingRequests.length === 0 ? (
-              <EmptyState emoji="📭" text="No pending friend requests." />
-            ) : (
-              myIncomingRequests.map((reqUsername) => {
-                const reqUser = users.find((u) => u.username.toLowerCase() === reqUsername.toLowerCase());
-                return (
-                  <div
-                    key={reqUsername}
-                    className="flex items-center gap-2.5 p-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl"
-                  >
+          <div className="space-y-4">
+            <div className="space-y-2">
+              {(myIncomingRequests.length > 0 || myOutgoingRequests.length === 0) && (
+                <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 px-0.5">
+                  Received
+                </p>
+              )}
+              {myIncomingRequests.length === 0 ? (
+                <EmptyState emoji="📭" text="No pending friend requests." />
+              ) : (
+                myIncomingRequests.map((reqUsername) => {
+                  const reqUser = users.find((u) => u.username.toLowerCase() === reqUsername.toLowerCase());
+                  return (
                     <div
-                      className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer"
-                      onClick={() => onViewProfileRequested?.(reqUsername)}
+                      key={reqUsername}
+                      className="flex items-center gap-2.5 p-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl"
                     >
-                      <UserAvatar username={reqUsername} users={users} className="w-9 h-9 text-lg" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-extrabold text-slate-800 dark:text-slate-100 truncate">
-                          {reqUser?.realName || reqUsername}
-                        </p>
-                        <p className="text-[10px] text-slate-400 truncate">@{reqUsername} wants to be friends</p>
+                      <div
+                        className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer"
+                        onClick={() => onViewProfileRequested?.(reqUsername)}
+                      >
+                        <UserAvatar username={reqUsername} users={users} className="w-9 h-9 text-lg" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-extrabold text-slate-800 dark:text-slate-100 truncate">
+                            {reqUser?.realName || reqUsername}
+                          </p>
+                          <p className="text-[10px] text-slate-400 truncate">@{reqUsername} wants to be friends</p>
+                        </div>
                       </div>
+                      <button
+                        onClick={() => acceptRequest(reqUsername)}
+                        disabled={pendingAction === `accept-${reqUsername}`}
+                        className="p-2 bg-emerald-500 hover:bg-emerald-400 text-white rounded-xl transition-all cursor-pointer disabled:opacity-50 shrink-0"
+                        title="Accept"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => declineRequest(reqUsername)}
+                        disabled={pendingAction === `decline-${reqUsername}`}
+                        className="p-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl transition-all cursor-pointer disabled:opacity-50 shrink-0"
+                        title="Decline"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
                     </div>
-                    <button
-                      onClick={() => acceptRequest(reqUsername)}
-                      disabled={pendingAction === `accept-${reqUsername}`}
-                      className="p-2 bg-emerald-500 hover:bg-emerald-400 text-white rounded-xl transition-all cursor-pointer disabled:opacity-50 shrink-0"
-                      title="Accept"
+                  );
+                })
+              )}
+            </div>
+
+            {myOutgoingRequests.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 px-0.5">
+                  Sent
+                </p>
+                {myOutgoingRequests.map((toUsername) => {
+                  const toUser = users.find((u) => u.username.toLowerCase() === toUsername.toLowerCase());
+                  return (
+                    <div
+                      key={toUsername}
+                      className="flex items-center gap-2.5 p-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl"
                     >
-                      <Check className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => declineRequest(reqUsername)}
-                      disabled={pendingAction === `decline-${reqUsername}`}
-                      className="p-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl transition-all cursor-pointer disabled:opacity-50 shrink-0"
-                      title="Decline"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                );
-              })
+                      <div
+                        className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer"
+                        onClick={() => onViewProfileRequested?.(toUsername)}
+                      >
+                        <UserAvatar username={toUsername} users={users} className="w-9 h-9 text-lg" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-extrabold text-slate-800 dark:text-slate-100 truncate">
+                            {toUser?.realName || toUsername}
+                          </p>
+                          <p className="text-[10px] text-slate-400 truncate">Request pending...</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => cancelRequest(toUsername)}
+                        disabled={pendingAction === `cancel-${toUsername}`}
+                        className="p-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl transition-all cursor-pointer disabled:opacity-50 shrink-0"
+                        title="Cancel request"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
         )}
@@ -331,7 +389,7 @@ export default function FriendsHub({
                       </div>
                     </div>
                     <button
-                      onClick={() => removeFriend(friendUsername)}
+                      onClick={() => setConfirmRemoveTarget(friendUsername)}
                       disabled={pendingAction === `remove-${friendUsername}`}
                       className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer disabled:opacity-50 shrink-0"
                       title="Remove friend"
@@ -356,6 +414,51 @@ export default function FriendsHub({
           </button>
         </div>
       )}
+
+      <AnimatePresence>
+        {confirmRemoveTarget && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+            onClick={() => setConfirmRemoveTarget(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl p-5 w-full max-w-xs space-y-4"
+            >
+              <div className="space-y-1">
+                <h3 className="text-sm font-black text-slate-900 dark:text-white">Remove friend?</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  You'll stop seeing @{confirmRemoveTarget}'s pints in your feed unless you re-add them.
+                </p>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <button
+                  onClick={() => setConfirmRemoveTarget(null)}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl text-xs transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    const target = confirmRemoveTarget;
+                    setConfirmRemoveTarget(null);
+                    if (target) removeFriend(target);
+                  }}
+                  className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer"
+                >
+                  Remove
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
