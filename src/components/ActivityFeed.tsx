@@ -923,7 +923,7 @@ export default function ActivityFeed({
                           </p>
                           {isAfterMidnight(log.date, log.timezone) && (
                             <span className="bg-violet-500/10 text-violet-600 dark:text-violet-400 font-black px-1.5 py-0.5 rounded text-[8px] uppercase tracking-widest border border-violet-500/20">
-                              🦉 Night Owl
+                              👺 Goblin Mode
                             </span>
                           )}
                         </div>

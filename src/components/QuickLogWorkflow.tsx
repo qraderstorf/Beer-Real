@@ -720,6 +720,25 @@ export default function QuickLogWorkflow({
                   </div>
                 </div>
 
+                {/* 5. Dart Combo - optional flag for stepping out for a dart (cigarette) with this pint */}
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setHadCig(!hadCig)}
+                    className={`w-full flex items-center justify-between gap-2 px-4 py-3 rounded-xl border text-sm font-bold transition-all cursor-pointer ${
+                      hadCig
+                        ? "bg-amber-500/10 border-amber-500 text-amber-600 dark:text-amber-400"
+                        : "bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-400"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span className="text-lg">🎯</span>
+                      Dart Combo Activated
+                    </span>
+                    {hadCig && <Check className="w-4 h-4" />}
+                  </button>
+                </div>
+
                 {/* Action buttons (Skip vs Save) */}
                 <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center gap-3">
                   {/* Skip Option */}
