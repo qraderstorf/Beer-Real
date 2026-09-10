@@ -158,6 +158,62 @@ app.get("/api/image/:filename", async (req, res) => {
   }
 });
 
+// TEMPORARY diagnostic endpoint - visit this URL directly in any browser to see exactly
+// why photo uploads are failing, without needing Cloud Console log access. Safe to remove
+// once uploads are confirmed working again. Does a real tiny write+read+delete against
+// Storage via both the Admin SDK and the client SDK and reports the raw error from each.
+app.get("/api/debug-storage", async (req, res) => {
+  const report: any = {
+    adminAppsInitialized: getAdminApps().length > 0,
+    adminCredentialSource,
+    configuredStorageBucket: null,
+    adminSdk: { attempted: false, success: false, bucketName: null, error: null },
+    clientSdk: { attempted: false, success: false, error: null }
+  };
+
+  try {
+    const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      report.configuredStorageBucket = config.storageBucket || null;
+    }
+  } catch (e) {}
+
+  const testFilename = `debug/storage-test-${Date.now()}.txt`;
+  const testContent = "beer-real storage diagnostic write";
+
+  if (getAdminApps().length > 0) {
+    report.adminSdk.attempted = true;
+    try {
+      const bucket = getAdminStorage().bucket();
+      report.adminSdk.bucketName = bucket.name;
+      const file = bucket.file(testFilename);
+      await file.save(Buffer.from(testContent), { metadata: { contentType: "text/plain" } });
+      const [contents] = await file.download();
+      await file.delete().catch(() => {});
+      report.adminSdk.success = contents.toString() === testContent;
+    } catch (err: any) {
+      report.adminSdk.error = { message: err?.message || String(err), code: err?.code || null };
+    }
+  }
+
+  try {
+    const storage = getStorageInstance();
+    if (storage) {
+      report.clientSdk.attempted = true;
+      const storageRef = ref(storage, testFilename);
+      await uploadString(storageRef, testContent);
+      await getDownloadURL(storageRef);
+      report.clientSdk.success = true;
+    }
+  } catch (err: any) {
+    report.clientSdk.error = { message: err?.message || String(err), code: err?.code || null };
+  }
+
+  res.setHeader("Content-Type", "application/json");
+  res.send(JSON.stringify(report, null, 2));
+});
+
 // Endpoint to upload base64 images and get back a short Storage download URL
 app.post("/api/upload-image", async (req, res) => {
   try {
@@ -455,6 +511,7 @@ function getFirestoreInstance(): any {
 
 let fcmAvailable = false;
 let fcmPermissionDenied = false;
+let adminCredentialSource = "none";
 try {
   const configPath = path.join(process.cwd(), "firebase-applet-config.json");
   const serviceAccountPath = path.join(process.cwd(), "serviceAccountKey.json");
@@ -466,6 +523,7 @@ try {
     try {
       const sa = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
       credentialToUse = cert(sa);
+      adminCredentialSource = "FIREBASE_SERVICE_ACCOUNT_KEY env var";
       console.log("[FCM Server] Using Firebase Admin Service Account credentials from environment variable.");
     } catch (e) {
       console.warn("[FCM Server] Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY env var:", e);
@@ -476,6 +534,7 @@ try {
     try {
       const sa = JSON.parse(fs.readFileSync(serviceAccountPath, "utf8"));
       credentialToUse = cert(sa);
+      adminCredentialSource = "serviceAccountKey.json";
       console.log("[FCM Server] Using Firebase Admin Service Account credentials from serviceAccountKey.json");
     } catch (e) {
       console.warn("[FCM Server] Failed to read serviceAccountKey.json:", e);
@@ -486,6 +545,7 @@ try {
     try {
       const sa = JSON.parse(fs.readFileSync(altServiceAccountPath, "utf8"));
       credentialToUse = cert(sa);
+      adminCredentialSource = "service-account.json";
       console.log("[FCM Server] Using Firebase Admin Service Account credentials from service-account.json");
     } catch (e) {
       console.warn("[FCM Server] Failed to read service-account.json:", e);
@@ -494,6 +554,7 @@ try {
 
   if (!credentialToUse) {
     credentialToUse = applicationDefault();
+    adminCredentialSource = "Application Default Credentials (ADC)";
     console.log("[FCM Server] Using Application Default Credentials (ADC).");
   }
 
