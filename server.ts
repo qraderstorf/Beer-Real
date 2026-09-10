@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
 import { createServer as createViteServer } from "vite";
 import { BeerLog, UserProfile, AppNotification, Pub, PubChatMessage, ContentReport } from "./src/types";
 import { normalizeBeerName } from "./src/data/beerCatalog";
@@ -16,6 +17,68 @@ const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json({ limit: "15mb" }));
+
+// --- Password hashing (salted scrypt, Node's built-in crypto, no extra dependency) ---
+const PASSWORD_HASH_PREFIX = "scrypt$";
+
+function hashPassword(plain: string): string {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const hash = crypto.scryptSync(plain, salt, 64).toString("hex");
+  return `${PASSWORD_HASH_PREFIX}${salt}$${hash}`;
+}
+
+function isHashedPassword(stored: string): boolean {
+  return typeof stored === "string" && stored.startsWith(PASSWORD_HASH_PREFIX);
+}
+
+// Verifies a plaintext password against a stored value. Supports legacy plaintext
+// values (direct compare) for accounts created before hashing was added - callers
+// that authenticate successfully against a legacy value should re-save the user with
+// hashPassword() so the account gets migrated to a hash on its next successful login.
+function verifyPassword(plain: string, stored: string): boolean {
+  if (!stored || typeof plain !== "string") return false;
+  if (isHashedPassword(stored)) {
+    const parts = stored.slice(PASSWORD_HASH_PREFIX.length).split("$");
+    if (parts.length !== 2) return false;
+    const [salt, hash] = parts;
+    try {
+      const hashBuf = Buffer.from(hash, "hex");
+      const candidateBuf = crypto.scryptSync(plain, salt, 64);
+      if (hashBuf.length !== candidateBuf.length) return false;
+      return crypto.timingSafeEqual(hashBuf, candidateBuf);
+    } catch {
+      return false;
+    }
+  }
+  return stored === plain;
+}
+
+// Sanity bounds so a joke/typo'd value (e.g. "5000" instead of "5.0") can't submit
+// and silently skew ABV/rating averages across the whole app.
+function clampAbv(value: number): number {
+  if (!Number.isFinite(value)) return 5.0;
+  return Math.min(Math.max(value, 0), 20);
+}
+
+function clampRating(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(Math.max(Math.round(value), 0), 5);
+}
+
+// Escapes user-supplied text before it's spliced into a notification's HTML string.
+// Notification text is rendered client-side via dangerouslySetInnerHTML (so the
+// <strong> tags server templates add can render) - without this, a comment, caption,
+// username, or pub name containing HTML/script would execute in the browser of
+// whoever receives the notification.
+function escapeHtml(value: any): string {
+  if (value === null || value === undefined) return "";
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 // Static uploads directory for images
 const uploadsDir = path.join(process.cwd(), "public", "uploads");
@@ -2348,7 +2411,7 @@ app.post("/api/beers", async (req, res) => {
     const normalized = normalizeBeerName(beerName);
     const cleanedBeerName = normalized.name || beerName;
     const cleanedStyle = (beerStyle && beerStyle !== "Other") ? beerStyle : (normalized.style || beerStyle || "Lager");
-    const cleanedAbv = Number(abv) || (normalized.abv || 5.0);
+    const cleanedAbv = clampAbv(Number(abv) || (normalized.abv || 5.0));
 
     let processedImageUrl = imageUrl || undefined;
     if (processedImageUrl && typeof processedImageUrl === "string" && processedImageUrl.startsWith("data:image/")) {
@@ -2362,7 +2425,7 @@ app.post("/api/beers", async (req, res) => {
       beerStyle: cleanedStyle,
       abv: cleanedAbv,
       date,
-      rating: Number(rating),
+      rating: clampRating(Number(rating)),
       cheers: [],
       comment: comment || "",
       imageUrl: processedImageUrl,
@@ -2407,7 +2470,8 @@ app.post("/api/beers", async (req, res) => {
           const tags = await getValidTags(saved.comment);
           for (const taggedUser of tags) {
             if (taggedUser.toLowerCase().trim() !== saved.user.toLowerCase().trim()) {
-              const snippet = saved.comment.length > 40 ? saved.comment.substring(0, 40) + "..." : saved.comment;
+              const rawSnippet = saved.comment.length > 40 ? saved.comment.substring(0, 40) + "..." : saved.comment;
+              const snippet = escapeHtml(rawSnippet);
               await createAndDispatchNotification({
                 idPrefix: "notif-tag",
                 user: saved.user,
@@ -2449,7 +2513,7 @@ app.post("/api/beers", async (req, res) => {
           await createAndDispatchNotification({
             idPrefix: "notif-first-pour",
             user: saved.user,
-            text: `🌅 <strong>${saved.user}</strong> poured the first pint of the day! Who's next?`,
+            text: `🌅 <strong>${escapeHtml(saved.user)}</strong> poured the first pint of the day! Who's next?`,
             date: saved.date,
             type: "first_pour",
           });
@@ -2491,8 +2555,8 @@ app.post("/api/beers/:id", async (req, res) => {
 
     if (beerName !== undefined) log.beerName = beerName;
     if (beerStyle !== undefined) log.beerStyle = beerStyle;
-    if (abv !== undefined) log.abv = Number(abv);
-    if (rating !== undefined) log.rating = Number(rating);
+    if (abv !== undefined) log.abv = clampAbv(Number(abv));
+    if (rating !== undefined) log.rating = clampRating(Number(rating));
     if (comment !== undefined) log.comment = comment;
     if (hadCig !== undefined) log.hadCig = !!hadCig;
 
@@ -2590,7 +2654,11 @@ app.post("/api/beers/:id/react", async (req, res) => {
     // Trigger Notification if reacting to someone else's post
     try {
       if (updated.user && updated.user.toLowerCase() !== username.toLowerCase()) {
-        let reactionLabel = reactionType;
+        // reactionType is client-supplied and unvalidated - only ever use it verbatim
+        // when it matches a known reaction; otherwise escape it before it can reach
+        // notification HTML (the client won't normally send anything outside this
+        // list, but nothing stops a direct API call from trying to).
+        let reactionLabel = escapeHtml(reactionType);
         if (reactionType === "creamy") reactionLabel = "Creamy 🍺";
         else if (reactionType === "cheers") reactionLabel = "Cheers 🍻";
         else if (reactionType === "fomo") reactionLabel = "FOMO Alert 🚨";
@@ -2616,9 +2684,10 @@ app.post("/api/beers/:id/react", async (req, res) => {
         if (reactionType === "dislike") {
           const dislikeCount = (updated.reactions?.["dislike"]?.length || 0) + (updated.reactions?.["imposter"]?.length || 0);
           if (dislikeCount === 3) {
+            const safeUpdatedUser = escapeHtml(updated.user);
             const imposterNotifText = isGuinness
-              ? `🚨 IMPOSTER PINT OUTED! 🕵️ caught <strong>${updated.user}</strong> logging a fake pint of <strong>Guinness</strong>!`
-              : `🚨 IMPOSTER PINT OUTED! 🕵️ caught <strong>${updated.user}</strong> logging a fake pint!`;
+              ? `🚨 IMPOSTER PINT OUTED! 🕵️ caught <strong>${safeUpdatedUser}</strong> logging a fake pint of <strong>Guinness</strong>!`
+              : `🚨 IMPOSTER PINT OUTED! 🕵️ caught <strong>${safeUpdatedUser}</strong> logging a fake pint!`;
             await createAndDispatchNotification({
               idPrefix: "imposter",
               user: username,
@@ -2697,7 +2766,7 @@ app.post("/api/beers/:id/comments", async (req, res) => {
   // Trigger Notification if commenting on someone else's post
   try {
     if (updated.user !== user) {
-      const snippet = text.length > 30 ? text.substring(0, 30) + "..." : text;
+      const snippet = escapeHtml(text.length > 30 ? text.substring(0, 30) + "..." : text);
       const isGuinness = isGuinnessBeerName(updated.beerName);
       const notifText = isGuinness
         ? `commented on your pint of <strong>Guinness</strong>: "${snippet}" 💬`
@@ -2718,7 +2787,7 @@ app.post("/api/beers/:id/comments", async (req, res) => {
         taggedUser.toLowerCase().trim() !== user.toLowerCase().trim() &&
         taggedUser.toLowerCase().trim() !== updated.user.toLowerCase().trim()
       ) {
-        const snippet = text.length > 30 ? text.substring(0, 30) + "..." : text;
+        const snippet = escapeHtml(text.length > 30 ? text.substring(0, 30) + "..." : text);
         await createAndDispatchNotification({
           idPrefix: "notif-tag",
           user: user,
@@ -2783,12 +2852,13 @@ app.post("/api/beers/:id/comments/:commentId/reactions", async (req, res) => {
   try {
     const comment = (updated.comments || []).find((c) => c.id === commentId);
     if (comment && comment.user !== user) {
-      const snippet = comment.text.length > 25 ? comment.text.substring(0, 25) + "..." : comment.text;
+      const snippet = escapeHtml(comment.text.length > 25 ? comment.text.substring(0, 25) + "..." : comment.text);
+      const safeReaction = escapeHtml(reaction);
       await createAndDispatchNotification({
         idPrefix: "notif-comment-react",
         user: user,
         targetUser: comment.user,
-        text: `reacted ${reaction} to your comment: "${snippet}"`,
+        text: `reacted ${safeReaction} to your comment: "${snippet}"`,
         type: "reaction",
       });
     }
@@ -2838,23 +2908,31 @@ app.post("/api/login", async (req, res) => {
   }
 
   const userPassword = user.password || "Pints!";
-  if (userPassword !== password) {
+  if (!verifyPassword(password, userPassword)) {
     res.status(401).json({ error: "Incorrect password. (The default is 'Pints!' for existing users)." });
     return;
   }
 
-  res.json({ success: true, user });
+  // Lazily migrate legacy plaintext passwords to a salted hash now that we know it's correct.
+  if (!isHashedPassword(userPassword)) {
+    user.password = hashPassword(password);
+    await saveUser(user);
+  }
+
+  const { password: _pw, ...safeUser } = user;
+  res.json({ success: true, user: safeUser });
 });
 
 // GET Users
 app.get("/api/users", async (req, res) => {
   const list = await getAllUsers();
-  res.json(list);
+  // Never send password hashes to clients - nothing client-side needs to read this back.
+  res.json(list.map(({ password, ...rest }) => rest));
 });
 
 // POST User Profile
 app.post("/api/users", async (req, res) => {
-  const { username, favoriteStyle, avatar, bio, password, realName, photoUrl, email } = req.body;
+  const { username, favoriteStyle, avatar, bio, password, currentPassword, realName, photoUrl, email } = req.body;
 
   if (!username || !favoriteStyle || !avatar) {
     res.status(400).json({ error: "Missing required profile fields" });
@@ -2867,6 +2945,18 @@ app.post("/api/users", async (req, res) => {
   );
 
   const existingUser = existingIndex !== -1 ? allUsersList[existingIndex] : null;
+
+  // Require proof of identity before touching an EXISTING account. This endpoint used
+  // to silently overwrite any account's profile - including its password - given
+  // nothing but its username, which is public everywhere in the app. New account
+  // creation is unaffected since there's nothing to authenticate against yet.
+  if (existingUser) {
+    const storedPassword = existingUser.password || "Pints!";
+    if (!verifyPassword((currentPassword || "").toString(), storedPassword)) {
+      res.status(401).json({ error: "Incorrect current password. Re-enter your current password to save changes." });
+      return;
+    }
+  }
 
   // Check duplicate email if provided
   if (email && email.trim()) {
@@ -2888,7 +2978,9 @@ app.post("/api/users", async (req, res) => {
     avatar,
     bio: bio || "",
     joinedDate: existingUser ? existingUser.joinedDate : new Date().toISOString().split("T")[0],
-    password: password || (existingUser ? (existingUser.password || "Pints!") : "Pints!"),
+    password: password
+      ? hashPassword(password)
+      : (existingUser ? existingUser.password : hashPassword("Pints!")),
     realName: realName || (existingUser ? existingUser.realName : undefined),
     photoUrl: photoUrl !== undefined ? photoUrl : (existingUser ? existingUser.photoUrl : undefined),
     email: email !== undefined ? (email.trim() || undefined) : (existingUser ? existingUser.email : undefined),
@@ -2904,7 +2996,7 @@ app.post("/api/users", async (req, res) => {
       const notif: AppNotification = {
         id: "newuser-" + username + "-" + Date.now(),
         user: username,
-        text: `🎉 A new user, <strong>${realName || username}</strong>, just joined BeerReal! Give them a warm welcome! 🍻`,
+        text: `🎉 A new user, <strong>${escapeHtml(realName || username)}</strong>, just joined BeerReal! Give them a warm welcome! 🍻`,
         date: new Date().toISOString(),
         readBy: [],
         type: "post"
@@ -2916,7 +3008,8 @@ app.post("/api/users", async (req, res) => {
     }
   }
 
-  res.json(saved);
+  const { password: _savedPw, ...safeSaved } = saved;
+  res.json(safeSaved);
 });
 
 // POST Send Friend Request
@@ -3266,7 +3359,7 @@ app.delete("/api/users/:username", async (req, res) => {
       return;
     }
     const userPassword = user.password || "Pints!";
-    if (userPassword !== password) {
+    if (!verifyPassword(password, userPassword)) {
       res.status(401).json({ error: "Incorrect password. Please re-enter your password to confirm account deletion." });
       return;
     }
@@ -3333,12 +3426,13 @@ app.post("/api/pubs/:id/messages", async (req, res) => {
         const userLower = user.toLowerCase().trim();
         const recipients = pub.members.filter((m) => m.toLowerCase().trim() !== userLower);
 
+        const safePubName = escapeHtml(pub.name);
         for (const recipient of recipients) {
           if (isBeacon) {
-            let locationStr = `in <strong>${pub.name}</strong>`;
+            let locationStr = `in <strong>${safePubName}</strong>`;
             const match = text.match(/BEACONS ARE LIT AT ([^!]+)!/i) || text.match(/lit the beacons at ([^!]+) for/i);
             if (match && match[1]) {
-              locationStr = `at <strong>${match[1].trim()}</strong> (${pub.name})`;
+              locationStr = `at <strong>${escapeHtml(match[1].trim())}</strong> (${safePubName})`;
             }
             await createAndDispatchNotification({
               idPrefix: "notif-beacon",
@@ -3348,12 +3442,12 @@ app.post("/api/pubs/:id/messages", async (req, res) => {
               type: "beacon",
             });
           } else {
-            const snippet = text.length > 40 ? text.substring(0, 40) + "..." : text;
+            const snippet = escapeHtml(text.length > 40 ? text.substring(0, 40) + "..." : text);
             await createAndDispatchNotification({
               idPrefix: "notif-pub-chat",
               user: user,
               targetUser: recipient,
-              text: `posted in <strong>${pub.name}</strong>: "${snippet}" 💬`,
+              text: `posted in <strong>${safePubName}</strong>: "${snippet}" 💬`,
               type: "chat",
             });
           }
@@ -3398,7 +3492,7 @@ app.post("/api/pubs", async (req, res) => {
         idPrefix: "notif-pub",
         user: owner,
         targetUser: invitee,
-        text: `invited you to join the Pub: "${name}"! 🍻`,
+        text: `invited you to join the Pub: "${escapeHtml(name)}"! 🍻`,
         type: "invite",
       });
     }
@@ -3444,7 +3538,7 @@ app.post("/api/pubs/:id/join", async (req, res) => {
       idPrefix: `notif-pub-join-${pub.id}-${member.toLowerCase().trim()}`,
       user: username,
       targetUser: member,
-      text: `has entered ${pub.name}! Who's buying the first round? 🍻`,
+      text: `has entered ${escapeHtml(pub.name)}! Who's buying the first round? 🍻`,
     });
   }
 
@@ -3480,7 +3574,7 @@ app.post("/api/pubs/:id/invite", async (req, res) => {
         idPrefix: "notif-pub-invite",
         user: sender || pub.owner,
         targetUser: invitee,
-        text: `invited you to join the Pub: "${pub.name}"! 🍻`,
+        text: `invited you to join the Pub: "${escapeHtml(pub.name)}"! 🍻`,
         type: "invite",
       });
     }

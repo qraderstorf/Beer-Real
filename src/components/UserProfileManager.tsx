@@ -96,7 +96,8 @@ export default function UserProfileManager({
   const [myEmail, setMyEmail] = useState("");
   const [myAvatar, setMyAvatar] = useState("🍻");
   const [myBio, setMyBio] = useState("");
-  const [myPassword, setMyPassword] = useState("Pints!");
+  const [myCurrentPassword, setMyCurrentPassword] = useState("");
+  const [myNewPassword, setMyNewPassword] = useState("");
   const [myPhotoUrl, setMyPhotoUrl] = useState<string | null>(null);
   const [myError, setMyError] = useState<string | null>(null);
   const [mySuccess, setMySuccess] = useState(false);
@@ -328,7 +329,8 @@ export default function UserProfileManager({
       if (profile) {
         setMyAvatar(profile.avatar || "🍻");
         setMyBio(profile.bio || "");
-        setMyPassword(profile.password || "Pints!");
+        setMyCurrentPassword("");
+        setMyNewPassword("");
         setMyRealName(profile.realName || "");
         setMyEmail(profile.email || "");
         setMyPhotoUrl(profile.photoUrl || null);
@@ -363,19 +365,22 @@ export default function UserProfileManager({
           favoriteStyle: "Other",
           avatar: myAvatar,
           bio: myBio.trim(),
-          password: myPassword,
+          currentPassword: myCurrentPassword,
+          password: myNewPassword.trim() || undefined,
           realName: myRealName.trim() || undefined,
           email: myEmail.trim() || undefined,
           photoUrl: myPhotoUrl || undefined
         }),
       });
 
+      const savedProfile = await response.json();
       if (!response.ok) {
-        throw new Error("Failed to update profile.");
+        throw new Error(savedProfile.error || "Failed to update profile.");
       }
 
-      const savedProfile = await response.json();
       onProfileAddedOrUpdated(savedProfile);
+      setMyCurrentPassword("");
+      setMyNewPassword("");
       setMySuccess(true);
       setTimeout(() => {
         setMySuccess(false);
@@ -1148,17 +1153,35 @@ export default function UserProfileManager({
                       />
                     </div>
 
-                    {/* Password */}
+                    {/* Current password - required to confirm it's really you before saving anything */}
                     <div>
-                      <label htmlFor="my-password-input" className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                        Profile Password
+                      <label htmlFor="my-current-password-input" className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                        Current Password
                       </label>
                       <input
-                        id="my-password-input"
+                        id="my-current-password-input"
                         type="password"
-                        placeholder="Default is Pints!"
-                        value={myPassword}
-                        onChange={(e) => setMyPassword(e.target.value)}
+                        placeholder="Required to save changes"
+                        autoComplete="current-password"
+                        required
+                        value={myCurrentPassword}
+                        onChange={(e) => setMyCurrentPassword(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 bg-white rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-800 transition-all"
+                      />
+                    </div>
+
+                    {/* New password - optional, leave blank to keep the current one */}
+                    <div>
+                      <label htmlFor="my-new-password-input" className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                        New Password
+                      </label>
+                      <input
+                        id="my-new-password-input"
+                        type="password"
+                        placeholder="Leave blank to keep current password"
+                        autoComplete="new-password"
+                        value={myNewPassword}
+                        onChange={(e) => setMyNewPassword(e.target.value)}
                         className="w-full px-3 py-2 border border-slate-200 bg-white rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-800 transition-all"
                       />
                     </div>
