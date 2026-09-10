@@ -211,7 +211,7 @@ export default function QuickLogWorkflow({
       beerName: cleanedName,
       beerStyle: (beerStyle && beerStyle !== "Unspecified") ? beerStyle : (normalized.style || "Unspecified"),
       abv: isNaN(numericAbv) ? 0 : numericAbv,
-      rating: 0,
+      rating: rating,
       comment: "",
       imageUrl: shortImageUrl,
       hadCig: false,
@@ -509,23 +509,56 @@ export default function QuickLogWorkflow({
                   </button>
                 </div>
 
-                {/* Subtle beer name picker */}
-                <div className="relative">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                    What are you drinking?
-                  </p>
+                {/* One-tap repeat shortcut for whatever was logged last time */}
+                {userPreviousBeers.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => selectSuggestion(userPreviousBeers[0])}
+                    className="w-full flex items-center justify-between gap-2 px-3.5 py-2.5 bg-amber-500/10 hover:bg-amber-500/15 border border-amber-500/30 rounded-xl transition-all cursor-pointer"
+                  >
+                    <span className="flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-400">
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Same as last time
+                    </span>
+                    <span className="text-[11px] font-semibold text-amber-600/80 dark:text-amber-400/70 truncate max-w-[55%]">
+                      {userPreviousBeers[0].name}
+                    </span>
+                  </button>
+                )}
+
+                {/* Subtle, fully optional beer name + rating - easy to ignore entirely */}
+                <div className="relative flex items-center gap-3">
                   <input
                     type="text"
                     autoComplete="off"
-                    placeholder="Guinness, Modelo, Dos Equis..."
+                    placeholder="What are you drinking? (optional)"
                     value={beerName}
                     onChange={(e) => handleBeerNameType(e.target.value)}
                     onFocus={() => setShowSuggestions(true)}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/10 focus:border-amber-500 text-slate-800 dark:text-white font-medium"
+                    className="flex-1 min-w-0 px-0 py-1.5 bg-transparent border-0 border-b border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 placeholder-slate-350 dark:placeholder-slate-600 focus:outline-none focus:border-amber-400 focus:text-slate-800 dark:focus:text-white transition-colors"
                   />
+                  <div className="flex items-center gap-0.5 shrink-0">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        onClick={() => setRating(rating === star ? 0 : star)}
+                        className="p-0.5 focus:outline-none cursor-pointer"
+                        title="Rating (optional)"
+                      >
+                        <Star
+                          className={`w-3.5 h-3.5 transition-all ${
+                            star <= rating
+                              ? "fill-amber-400 text-amber-400"
+                              : "text-slate-300 dark:text-slate-700"
+                          }`}
+                        />
+                      </button>
+                    ))}
+                  </div>
 
                   {showSuggestions && filteredSuggestions.length > 0 && (
-                    <div className="absolute left-0 right-0 mt-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl z-30 max-h-44 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-900">
+                    <div className="absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl z-30 max-h-44 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-900">
                       {filteredSuggestions.slice(0, 6).map((beer) => (
                         <button
                           key={beer.name}
@@ -539,26 +572,26 @@ export default function QuickLogWorkflow({
                       ))}
                     </div>
                   )}
-
-                  {userPreviousBeers.length > 0 && (
-                    <div className="mt-2 flex items-center gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
-                      {userPreviousBeers.slice(0, 6).map((beer, idx) => (
-                        <button
-                          key={`preview-prev-${beer.name}-${idx}`}
-                          type="button"
-                          onClick={() => selectSuggestion(beer)}
-                          className={`shrink-0 px-2.5 py-1 text-[11px] font-bold rounded-full border transition-all cursor-pointer ${
-                            beerName.toLowerCase().trim() === beer.name.toLowerCase().trim()
-                              ? "bg-amber-500 text-slate-950 border-amber-500"
-                              : "bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400"
-                          }`}
-                        >
-                          {beer.name}
-                        </button>
-                      ))}
-                    </div>
-                  )}
                 </div>
+
+                {userPreviousBeers.length > 1 && (
+                  <div className="-mt-3 flex items-center gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
+                    {userPreviousBeers.slice(1, 6).map((beer, idx) => (
+                      <button
+                        key={`preview-prev-${beer.name}-${idx}`}
+                        type="button"
+                        onClick={() => selectSuggestion(beer)}
+                        className={`shrink-0 px-2.5 py-1 text-[11px] font-bold rounded-full border transition-all cursor-pointer ${
+                          beerName.toLowerCase().trim() === beer.name.toLowerCase().trim()
+                            ? "bg-amber-500 text-slate-950 border-amber-500"
+                            : "bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400"
+                        }`}
+                      >
+                        {beer.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 {/* Single main instant post button */}
                 <button
