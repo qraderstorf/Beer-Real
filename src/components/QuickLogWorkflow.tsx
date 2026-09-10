@@ -527,27 +527,30 @@ export default function QuickLogWorkflow({
                 )}
 
                 {/* Subtle, fully optional beer name + rating - easy to ignore entirely */}
-                <div className="relative flex items-center gap-3">
-                  <input
-                    type="text"
-                    autoComplete="off"
-                    placeholder="What are you drinking? (optional)"
-                    value={beerName}
-                    onChange={(e) => handleBeerNameType(e.target.value)}
-                    onFocus={() => setShowSuggestions(true)}
-                    className="flex-1 min-w-0 px-0 py-1.5 bg-transparent border-0 border-b border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 placeholder-slate-350 dark:placeholder-slate-600 focus:outline-none focus:border-amber-400 focus:text-slate-800 dark:focus:text-white transition-colors"
-                  />
-                  <div className="flex items-center gap-0.5 shrink-0">
+                <div className="relative flex items-center gap-2.5">
+                  <div className="flex-1 min-w-0 flex items-center gap-1.5 px-3 py-2 bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 rounded-full">
+                    <span className="text-xs shrink-0 opacity-70">🍺</span>
+                    <input
+                      type="text"
+                      autoComplete="off"
+                      placeholder="What are you drinking? (optional)"
+                      value={beerName}
+                      onChange={(e) => handleBeerNameType(e.target.value)}
+                      onFocus={() => setShowSuggestions(true)}
+                      className="flex-1 min-w-0 bg-transparent border-0 text-xs text-slate-600 dark:text-slate-300 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none"
+                    />
+                  </div>
+                  <div className="flex items-center shrink-0">
                     {[1, 2, 3, 4, 5].map((star) => (
                       <button
                         key={star}
                         type="button"
                         onClick={() => setRating(rating === star ? 0 : star)}
-                        className="p-0.5 focus:outline-none cursor-pointer"
+                        className="p-1.5 -m-0.5 focus:outline-none cursor-pointer"
                         title="Rating (optional)"
                       >
                         <Star
-                          className={`w-3.5 h-3.5 transition-all ${
+                          className={`w-5 h-5 transition-all ${
                             star <= rating
                               ? "fill-amber-400 text-amber-400"
                               : "text-slate-300 dark:text-slate-700"
