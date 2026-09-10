@@ -84,16 +84,23 @@ async function saveBase64ToStorage(base64Data: string): Promise<string> {
   // below can (and was - this is why some images stopped uploading: the client SDK
   // path started getting storage/unauthorized and silently falling back to saving
   // the photo on local disk, which Cloud Run wipes on every redeploy).
+  //
+  // Deliberately NOT using makePublic()/a public download URL here: that depends on
+  // the bucket's object ACL settings, which throw outright on a bucket with Uniform
+  // Bucket-Level Access (a common default) and can independently be blocked by the
+  // same kind of Security Rules change that broke the client SDK write above. Instead
+  // we serve the bytes back out ourselves via GET /api/image/:filename using these
+  // same Admin SDK credentials, so viewing a photo never depends on the bucket or an
+  // object being publicly readable at all.
   if (getAdminApps().length > 0) {
     try {
       const buffer = Buffer.from(matches[2], "base64");
       const bucket = getAdminStorage().bucket();
       const file = bucket.file(filename);
       await file.save(buffer, { metadata: { contentType: `image/${matches[1]}` } });
-      await file.makePublic();
-      const publicUrl = file.publicUrl();
-      console.log(`[Storage] Uploaded base64 (${base64Data.length} chars) via Admin SDK: ${publicUrl}`);
-      return publicUrl;
+      const proxyUrl = `/api/image/${encodeURIComponent(filename.replace(/^photos\//, ""))}`;
+      console.log(`[Storage] Uploaded base64 (${base64Data.length} chars) via Admin SDK, serving via ${proxyUrl}`);
+      return proxyUrl;
     } catch (adminErr) {
       console.warn("[Storage] Admin SDK upload failed, trying client SDK:", adminErr);
     }
@@ -116,6 +123,40 @@ async function saveBase64ToStorage(base64Data: string): Promise<string> {
     return saveBase64ToImageFile(base64Data);
   }
 }
+
+// Stream an image back out of Cloud Storage using the server's own privileged Admin
+// SDK credentials, so viewing a photo never depends on the bucket/object being
+// publicly readable, on Storage Security Rules, or on signed URLs - all of which
+// have proven unreliable in this project. See saveBase64ToStorage() above.
+app.get("/api/image/:filename", async (req, res) => {
+  try {
+    if (getAdminApps().length === 0) {
+      res.status(503).end();
+      return;
+    }
+    // Only allow simple filenames (no path traversal) under the fixed photos/ prefix.
+    const safeName = path.basename(req.params.filename);
+    const bucket = getAdminStorage().bucket();
+    const file = bucket.file(`photos/${safeName}`);
+    const [exists] = await file.exists();
+    if (!exists) {
+      res.status(404).end();
+      return;
+    }
+    const [metadata] = await file.getMetadata();
+    res.setHeader("Content-Type", metadata.contentType || "image/jpeg");
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    file.createReadStream()
+      .on("error", (err) => {
+        console.error(`[Storage] Failed to stream image ${safeName}:`, err);
+        if (!res.headersSent) res.status(500).end();
+      })
+      .pipe(res);
+  } catch (err) {
+    console.error(`[Storage] Failed to serve image ${req.params.filename}:`, err);
+    res.status(500).end();
+  }
+});
 
 // Endpoint to upload base64 images and get back a short Storage download URL
 app.post("/api/upload-image", async (req, res) => {
