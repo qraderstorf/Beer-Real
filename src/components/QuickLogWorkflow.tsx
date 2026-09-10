@@ -37,7 +37,7 @@ export default function QuickLogWorkflow({
 
   // Enrichment fields
   const [beerName, setBeerName] = useState("");
-  const [beerStyle, setBeerStyle] = useState("IPA");
+  const [beerStyle, setBeerStyle] = useState("");
   const [abv, setAbv] = useState<string>("");
   const [rating, setRating] = useState<number>(0);
   const [comment, setComment] = useState("");
@@ -130,7 +130,7 @@ export default function QuickLogWorkflow({
     setCapturedPhoto(null);
     setActiveLog(null);
     setBeerName("");
-    setBeerStyle("IPA");
+    setBeerStyle("");
     setAbv("");
     setRating(0);
     setComment("");
@@ -201,12 +201,16 @@ export default function QuickLogWorkflow({
     // Upload base64 image first to obtain short URL
     const shortImageUrl = await ensureShortImageUrl(capturedPhoto);
 
-    // Instant Post payload: defaults are set to ensure valid backend schema but unskews stats!
+    // Instant Post payload: whatever beer was picked (if any) is used, with safe defaults
+    // for a valid backend schema when someone posts without picking one.
+    const normalized = normalizeBeerName(beerName);
+    const cleanedName = normalized.name || beerName.trim() || "Unnamed Pint";
+    const numericAbv = abv ? parseFloat(abv) : (normalized.abv || 0);
     const payload = {
       user: currentUser || "Anonymous",
-      beerName: "Unnamed Pint",
-      beerStyle: "Unspecified",
-      abv: 0,
+      beerName: cleanedName,
+      beerStyle: (beerStyle && beerStyle !== "Unspecified") ? beerStyle : (normalized.style || "Unspecified"),
+      abv: isNaN(numericAbv) ? 0 : numericAbv,
       rating: 0,
       comment: "",
       imageUrl: shortImageUrl,
@@ -505,21 +509,70 @@ export default function QuickLogWorkflow({
                   </button>
                 </div>
 
+                {/* Subtle beer name picker */}
+                <div className="relative">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                    What are you drinking?
+                  </p>
+                  <input
+                    type="text"
+                    autoComplete="off"
+                    placeholder="Guinness, Modelo, Dos Equis..."
+                    value={beerName}
+                    onChange={(e) => handleBeerNameType(e.target.value)}
+                    onFocus={() => setShowSuggestions(true)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/10 focus:border-amber-500 text-slate-800 dark:text-white font-medium"
+                  />
+
+                  {showSuggestions && filteredSuggestions.length > 0 && (
+                    <div className="absolute left-0 right-0 mt-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl z-30 max-h-44 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-900">
+                      {filteredSuggestions.slice(0, 6).map((beer) => (
+                        <button
+                          key={beer.name}
+                          type="button"
+                          onClick={() => selectSuggestion(beer)}
+                          className="w-full text-left px-3.5 py-2 hover:bg-amber-50 dark:hover:bg-amber-950/20 transition-colors flex items-center justify-between text-xs cursor-pointer"
+                        >
+                          <span className="font-bold text-slate-800 dark:text-slate-200">{beer.name}</span>
+                          <span className="text-slate-400">{beer.style}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {userPreviousBeers.length > 0 && (
+                    <div className="mt-2 flex items-center gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
+                      {userPreviousBeers.slice(0, 6).map((beer, idx) => (
+                        <button
+                          key={`preview-prev-${beer.name}-${idx}`}
+                          type="button"
+                          onClick={() => selectSuggestion(beer)}
+                          className={`shrink-0 px-2.5 py-1 text-[11px] font-bold rounded-full border transition-all cursor-pointer ${
+                            beerName.toLowerCase().trim() === beer.name.toLowerCase().trim()
+                              ? "bg-amber-500 text-slate-950 border-amber-500"
+                              : "bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400"
+                          }`}
+                        >
+                          {beer.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 {/* Single main instant post button */}
                 <button
                   onClick={handleInstantPost}
                   disabled={isSubmittingLog}
-                  className="w-full bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-extrabold py-3.5 px-4 rounded-xl shadow-lg shadow-amber-500/20 focus:outline-none disabled:opacity-50 transition-all flex items-center justify-center gap-2 cursor-pointer text-sm tracking-wide uppercase"
+                  className="w-full bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-extrabold py-3.5 px-4 rounded-xl shadow-lg shadow-amber-500/20 focus:outline-none disabled:opacity-50 transition-all flex items-center justify-center gap-2 cursor-pointer text-sm"
                 >
                   {isSubmittingLog ? (
                     <>
                       <Loader2 className="w-5 h-5 animate-spin" />
-                      Posting Instant Pint...
+                      Posting...
                     </>
                   ) : (
-                    <>
-                      🚀 POST INSTANTLY
-                    </>
+                    "Post"
                   )}
                 </button>
               </div>
