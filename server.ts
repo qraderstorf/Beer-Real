@@ -3582,6 +3582,9 @@ app.post("/api/pubs/:id/messages", async (req, res) => {
     const { id } = req.params;
     const user = (req.body.user || req.body.username || "").toString().trim();
     const text = (req.body.text || "").toString().trim();
+    const targetUsernames: string[] | undefined = Array.isArray(req.body.targetUsernames)
+      ? req.body.targetUsernames.map((u: any) => String(u).trim()).filter(Boolean)
+      : undefined;
 
     if (!user || !text) {
       res.status(400).json({ error: "User and message text are required." });
@@ -3598,14 +3601,20 @@ app.post("/api/pubs/:id/messages", async (req, res) => {
 
     const saved = await savePubChatMessage(msg);
 
-    // Dispatch notifications to all other members of the pub
+    // Dispatch notifications. A beacon with an explicit invite list notifies exactly
+    // those people - which may include friends who aren't pub members, since the
+    // point is inviting people out, not just alerting the existing roster. Anything
+    // else (an ordinary chat message, or a beacon with no explicit list) notifies the
+    // whole pub roster same as before.
     try {
       const allPubsList = await getAllPubs();
       const pub = allPubsList.find((p) => p.id === id);
-      if (pub && pub.members && pub.members.length > 0) {
+      if (pub) {
         const isBeacon = text.includes("BEACONS ARE LIT") || text.toLowerCase().includes("beacon");
         const userLower = user.toLowerCase().trim();
-        const recipients = pub.members.filter((m) => m.toLowerCase().trim() !== userLower);
+        const recipients = isBeacon && targetUsernames && targetUsernames.length > 0
+          ? targetUsernames.filter((u) => u.toLowerCase().trim() !== userLower)
+          : (pub.members || []).filter((m) => m.toLowerCase().trim() !== userLower);
 
         const safePubName = escapeHtml(pub.name);
         for (const recipient of recipients) {
