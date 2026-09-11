@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   Users, Plus, Trash2, LogOut, Check, Shield, AlertCircle, 
@@ -259,8 +259,18 @@ export default function PubHub({
   const [allBeers, setAllBeers] = useState<BeerLog[]>([]);
   const [loadingBeers, setLoadingBeers] = useState(false);
 
-  // Pub timeframe filter state
+  // Pub timeframe filter state. Defaults to whichever window actually has
+  // check-ins (Week -> Month -> Year -> All) so quiet pubs don't land on an
+  // empty "no check-ins this week" state; a manual pill click locks it until
+  // the user switches pubs.
   const [superlativeTimeframe, setSuperlativeTimeframe] = useState<"7d" | "30d" | "year" | "all">("7d");
+  const [superlativeTimeframeLocked, setSuperlativeTimeframeLocked] = useState(false);
+  const lastAutoTimeframePubIdRef = useRef<string | null>(null);
+
+  const selectSuperlativeTimeframe = (tf: "7d" | "30d" | "year" | "all") => {
+    setSuperlativeTimeframe(tf);
+    setSuperlativeTimeframeLocked(true);
+  };
 
   const fetchAllBeers = async (retries = 2) => {
     setLoadingBeers(true);
@@ -918,6 +928,35 @@ export default function PubHub({
       return !isNaN(t) && t >= cutoff;
     });
   }, [activePubFilteredLogs, superlativeTimeframe]);
+
+  // Auto-pick the narrowest timeframe that actually has check-ins (Week ->
+  // Month -> Year -> All) whenever the active pub changes, so quiet pubs
+  // don't default to an empty "no check-ins this week" state. Stops once the
+  // user manually picks a pill, and re-arms on the next pub switch.
+  useEffect(() => {
+    if (!activePub) return;
+    if (lastAutoTimeframePubIdRef.current !== activePub.id) {
+      lastAutoTimeframePubIdRef.current = activePub.id;
+      setSuperlativeTimeframeLocked(false);
+    }
+  }, [activePub?.id]);
+
+  useEffect(() => {
+    if (!activePub || superlativeTimeframeLocked) return;
+    const now = Date.now();
+    const countInWindow = (days: number | null) => {
+      if (days === null) return activePubFilteredLogs.length;
+      const cutoff = now - days * 24 * 60 * 60 * 1000;
+      return activePubFilteredLogs.filter((l) => {
+        const t = new Date(l.date).getTime();
+        return !isNaN(t) && t >= cutoff;
+      }).length;
+    };
+    if (countInWindow(7) > 0) setSuperlativeTimeframe("7d");
+    else if (countInWindow(30) > 0) setSuperlativeTimeframe("30d");
+    else if (countInWindow(365) > 0) setSuperlativeTimeframe("year");
+    else setSuperlativeTimeframe("all");
+  }, [activePub, activePubFilteredLogs, superlativeTimeframeLocked]);
 
   // Dynamic Superlatives Computation with Weekly Rotation
   const pubSuperlatives = useMemo(() => {
@@ -1780,7 +1819,7 @@ export default function PubHub({
             <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200/60 dark:border-slate-700/60 shrink-0 self-start sm:self-auto">
               <button
                 type="button"
-                onClick={() => setSuperlativeTimeframe("7d")}
+                onClick={() => selectSuperlativeTimeframe("7d")}
                 className={`px-2.5 py-1 text-[10px] font-extrabold rounded-lg transition-all cursor-pointer ${
                   superlativeTimeframe === "7d"
                     ? "bg-amber-500 text-slate-950 shadow-xs"
@@ -1791,7 +1830,7 @@ export default function PubHub({
               </button>
               <button
                 type="button"
-                onClick={() => setSuperlativeTimeframe("30d")}
+                onClick={() => selectSuperlativeTimeframe("30d")}
                 className={`px-2.5 py-1 text-[10px] font-extrabold rounded-lg transition-all cursor-pointer ${
                   superlativeTimeframe === "30d"
                     ? "bg-amber-500 text-slate-950 shadow-xs"
@@ -1802,7 +1841,7 @@ export default function PubHub({
               </button>
               <button
                 type="button"
-                onClick={() => setSuperlativeTimeframe("year")}
+                onClick={() => selectSuperlativeTimeframe("year")}
                 className={`px-2.5 py-1 text-[10px] font-extrabold rounded-lg transition-all cursor-pointer ${
                   superlativeTimeframe === "year"
                     ? "bg-amber-500 text-slate-950 shadow-xs"
@@ -1813,7 +1852,7 @@ export default function PubHub({
               </button>
               <button
                 type="button"
-                onClick={() => setSuperlativeTimeframe("all")}
+                onClick={() => selectSuperlativeTimeframe("all")}
                 className={`px-2.5 py-1 text-[10px] font-extrabold rounded-lg transition-all cursor-pointer ${
                   superlativeTimeframe === "all"
                     ? "bg-amber-500 text-slate-950 shadow-xs"
