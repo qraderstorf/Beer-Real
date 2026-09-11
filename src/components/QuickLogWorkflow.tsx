@@ -310,6 +310,7 @@ export default function QuickLogWorkflow({
 
     // Payload for updating details of an existing log
     const payload = {
+      currentUser,
       beerName: cleanedName,
       beerStyle: (beerStyle && beerStyle !== "Unspecified") ? beerStyle : (normalized.style || "Lager"),
       abv: isNaN(numericAbv) ? 0 : numericAbv,

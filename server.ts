@@ -80,6 +80,18 @@ function escapeHtml(value: any): string {
     .replace(/'/g, "&#39;");
 }
 
+// Strips the password hash before a user profile ever reaches a client response.
+// Nothing client-side needs to read this back, and a hash still enables offline
+// dictionary/brute-force attempts if leaked, so it should never leave the server.
+function stripPassword<T extends { password?: any }>(user: T): Omit<T, "password"> {
+  const { password, ...rest } = user;
+  return rest;
+}
+
+function stripPasswords<T extends { password?: any }>(users: T[]): Omit<T, "password">[] {
+  return users.map(stripPassword);
+}
+
 // Static uploads directory for images
 const uploadsDir = path.join(process.cwd(), "public", "uploads");
 if (!fs.existsSync(uploadsDir)) {
@@ -2540,7 +2552,8 @@ app.post("/api/beers", async (req, res) => {
 app.post("/api/beers/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { beerName, beerStyle, abv, rating, comment, hadCig } = req.body;
+    const { beerName, beerStyle, abv, rating, comment, hadCig, currentUser } = req.body;
+    const requester = (currentUser || req.query.currentUser || req.headers["x-current-user"] || "").toString();
 
     let log = await findBeerLogById(id);
     if (!log) {
@@ -2550,6 +2563,13 @@ app.post("/api/beers/:id", async (req, res) => {
 
     if (!log) {
       res.status(404).json({ error: "Beer log not found" });
+      return;
+    }
+
+    const isOwner = requester.toLowerCase().trim() === (log.user || "").toLowerCase().trim();
+    const isAdmin = isSeymoreBeers(requester);
+    if (!isOwner && !isAdmin) {
+      res.status(403).json({ error: "Unauthorized. You can only edit your own posts." });
       return;
     }
 
@@ -3063,13 +3083,13 @@ app.post("/api/friends/request", async (req, res) => {
       text: `is now friends with you! 🍻`,
       type: "friend_accept",
     });
-    res.json({ status: "friends", users: [fromUser, toUser] });
+    res.json({ status: "friends", users: stripPasswords([fromUser, toUser]) });
     return;
   }
 
   const toRequests = toUser.friendRequests || [];
   if (toRequests.some((r) => r.toLowerCase() === from.toLowerCase())) {
-    res.json({ status: "already_requested", users: [toUser] });
+    res.json({ status: "already_requested", users: stripPasswords([toUser]) });
     return;
   }
 
@@ -3084,7 +3104,7 @@ app.post("/api/friends/request", async (req, res) => {
     type: "friend_request",
   });
 
-  res.json({ status: "requested", users: [toUser] });
+  res.json({ status: "requested", users: stripPasswords([toUser]) });
 });
 
 // POST Accept Friend Request
@@ -3127,7 +3147,7 @@ app.post("/api/friends/accept", async (req, res) => {
     type: "friend_accept",
   });
 
-  res.json({ status: "friends", users: [userProfile, requesterProfile] });
+  res.json({ status: "friends", users: stripPasswords([userProfile, requesterProfile]) });
 });
 
 // POST Decline Friend Request
@@ -3150,7 +3170,7 @@ app.post("/api/friends/decline", async (req, res) => {
   userProfile.friendRequests = (userProfile.friendRequests || []).filter((r) => r.toLowerCase() !== requester.toLowerCase());
   await saveUser(userProfile);
 
-  res.json({ status: "declined", users: [userProfile] });
+  res.json({ status: "declined", users: stripPasswords([userProfile]) });
 });
 
 // POST Cancel a Friend Request I Sent
@@ -3173,7 +3193,7 @@ app.post("/api/friends/cancel", async (req, res) => {
   targetProfile.friendRequests = (targetProfile.friendRequests || []).filter((r) => r.toLowerCase() !== user.toLowerCase());
   await saveUser(targetProfile);
 
-  res.json({ status: "cancelled", users: [targetProfile] });
+  res.json({ status: "cancelled", users: stripPasswords([targetProfile]) });
 });
 
 // POST Remove Friend
@@ -3203,13 +3223,19 @@ app.post("/api/friends/remove", async (req, res) => {
     await saveUser(friendProfile);
   }
 
-  res.json({ status: "removed", users: friendProfile ? [userProfile, friendProfile] : [userProfile] });
+  res.json({ status: "removed", users: stripPasswords(friendProfile ? [userProfile, friendProfile] : [userProfile]) });
 });
 
 // POST Block User - hides the target's content from the blocker and severs any friendship
 app.post("/api/users/:username/block", async (req, res) => {
   const { username } = req.params;
   const targetUsername = (req.body.targetUsername || "").toString().trim();
+  const requester = (req.body.currentUser || req.query.currentUser || req.headers["x-current-user"] || "").toString();
+
+  if (requester.toLowerCase().trim() !== username.toLowerCase().trim() && !isSeymoreBeers(requester)) {
+    res.status(403).json({ error: "Unauthorized. You can only manage your own block list." });
+    return;
+  }
 
   if (!targetUsername) {
     res.status(400).json({ error: "'targetUsername' is required." });
@@ -3245,13 +3271,19 @@ app.post("/api/users/:username/block", async (req, res) => {
     await saveUser(targetProfile);
   }
 
-  res.json({ status: "blocked", users: targetProfile ? [userProfile, targetProfile] : [userProfile] });
+  res.json({ status: "blocked", users: stripPasswords(targetProfile ? [userProfile, targetProfile] : [userProfile]) });
 });
 
 // POST Unblock User
 app.post("/api/users/:username/unblock", async (req, res) => {
   const { username } = req.params;
   const targetUsername = (req.body.targetUsername || "").toString().trim();
+  const requester = (req.body.currentUser || req.query.currentUser || req.headers["x-current-user"] || "").toString();
+
+  if (requester.toLowerCase().trim() !== username.toLowerCase().trim() && !isSeymoreBeers(requester)) {
+    res.status(403).json({ error: "Unauthorized. You can only manage your own block list." });
+    return;
+  }
 
   if (!targetUsername) {
     res.status(400).json({ error: "'targetUsername' is required." });
@@ -3268,7 +3300,7 @@ app.post("/api/users/:username/unblock", async (req, res) => {
   userProfile.blockedUsers = (userProfile.blockedUsers || []).filter((b) => b.toLowerCase() !== targetUsername.toLowerCase());
   await saveUser(userProfile);
 
-  res.json({ status: "unblocked", users: [userProfile] });
+  res.json({ status: "unblocked", users: stripPasswords([userProfile]) });
 });
 
 // POST Submit a content/user report

@@ -264,7 +264,7 @@ export default function UserProfileManager({
       const res = await fetch(`/api/users/${encodeURIComponent(currentUser)}/${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetUsername: targetUser.username }),
+        body: JSON.stringify({ targetUsername: targetUser.username, currentUser }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not update block status.");
