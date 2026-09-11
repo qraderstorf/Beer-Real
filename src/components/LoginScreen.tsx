@@ -153,10 +153,6 @@ export default function LoginScreen({ users, onLoginSuccess, onProfileCreated }:
       setError("Please specify a password.");
       return;
     }
-    if (!newPhotoUrl) {
-      setError("Please upload a profile picture. A photo is required to sign up.");
-      return;
-    }
 
     setLoading(true);
     setError(null);
@@ -353,7 +349,7 @@ export default function LoginScreen({ users, onLoginSuccess, onProfileCreated }:
               >
                 <div>
                   <label className="block text-xs font-extrabold text-slate-600 uppercase tracking-wider mb-1.5">
-                    Your Real Name
+                    Your Real Name (Optional)
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -366,7 +362,6 @@ export default function LoginScreen({ users, onLoginSuccess, onProfileCreated }:
                       onChange={(e) => setNewRealName(e.target.value)}
                       placeholder="e.g. John Doe"
                       className="block w-full pl-10 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 placeholder-slate-400 transition-all"
-                      required
                     />
                   </div>
                 </div>
@@ -431,7 +426,7 @@ export default function LoginScreen({ users, onLoginSuccess, onProfileCreated }:
 
                 <div>
                   <label className="block text-xs font-extrabold text-slate-600 uppercase tracking-wider mb-1.5">
-                    Profile Picture (Required)
+                    Profile Picture (Optional)
                   </label>
                   <div className="space-y-2">
                     <div
@@ -473,6 +468,7 @@ export default function LoginScreen({ users, onLoginSuccess, onProfileCreated }:
                             <span className="text-amber-600 font-bold">Drag & drop</span> or click to upload
                           </p>
                           <p className="text-[9px] text-slate-400">PNG, JPG up to 5MB (with Cropping)</p>
+                          <p className="text-[9px] text-slate-400">Skip this and your emoji avatar will be used instead</p>
                         </>
                       )}
                     </div>
