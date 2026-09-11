@@ -3,7 +3,7 @@ import path from "path";
 import fs from "fs";
 import crypto from "crypto";
 import { createServer as createViteServer } from "vite";
-import { BeerLog, UserProfile, AppNotification, Pub, PubChatMessage, ContentReport } from "./src/types";
+import { BeerLog, UserProfile, AppNotification, Pub, PubChatMessage, ContentReport, PubWidgetConfig, PubWidgetType } from "./src/types";
 import { normalizeBeerName } from "./src/data/beerCatalog";
 import { isImposterLog } from "./src/utils";
 import { initializeApp } from "firebase/app";
@@ -3778,6 +3778,60 @@ app.post("/api/pubs/:id/invite", async (req, res) => {
 });
 
 // POST Leave Pub
+// POST Update a Pub's customizable Awards-tab widgets (any member can customize)
+const VALID_WIDGET_TYPES: PubWidgetType[] = ["beverage-gauge", "abv-gauge", "rating-gauge"];
+app.post("/api/pubs/:id/widgets", async (req, res) => {
+  const { id } = req.params;
+  const currentUser = (req.body.currentUser || "").toString().trim();
+  const widgetsInput = req.body.widgets;
+
+  if (!currentUser) {
+    res.status(400).json({ error: "currentUser is required." });
+    return;
+  }
+  if (!Array.isArray(widgetsInput)) {
+    res.status(400).json({ error: "widgets must be an array." });
+    return;
+  }
+
+  const allPubsList = await getAllPubs();
+  const pub = allPubsList.find((p) => p.id === id);
+  if (!pub) {
+    res.status(404).json({ error: "Pub not found" });
+    return;
+  }
+
+  const isMember = pub.members.some((m) => m.toLowerCase() === currentUser.toLowerCase());
+  if (!isMember && !isSeymoreBeers(currentUser)) {
+    res.status(403).json({ error: "Only pub members can customize this Pub's widgets." });
+    return;
+  }
+
+  if (widgetsInput.length > 6) {
+    res.status(400).json({ error: "A Pub can have at most 6 widgets." });
+    return;
+  }
+
+  const cleanWidgets: PubWidgetConfig[] = [];
+  for (const w of widgetsInput) {
+    const type = (w?.type || "").toString();
+    if (!VALID_WIDGET_TYPES.includes(type as PubWidgetType)) continue;
+    const label = (w?.label || "").toString().trim().slice(0, 40) || "Custom Widget";
+    const keyword = w?.keyword ? w.keyword.toString().trim().slice(0, 30) : undefined;
+    if (type === "beverage-gauge" && !keyword) continue; // beverage gauge requires a keyword
+    cleanWidgets.push({
+      id: (w?.id || `widget-${Date.now()}-${cleanWidgets.length}`).toString().slice(0, 60),
+      type: type as PubWidgetType,
+      label,
+      ...(keyword ? { keyword } : {}),
+    });
+  }
+
+  pub.widgets = cleanWidgets;
+  const saved = await savePub(pub);
+  res.json(saved);
+});
+
 app.post("/api/pubs/:id/leave", async (req, res) => {
   const { id } = req.params;
   const username = (req.body.username || req.body.user || "").toString().trim();

@@ -73,6 +73,15 @@ export interface AppNotification {
   type?: 'post' | 'comment' | 'cheer' | 'reaction' | 'bender' | 'first_pour' | 'invite' | 'tag' | 'imposter' | 'beacon' | 'chat' | 'friend_request' | 'friend_accept';
 }
 
+export type PubWidgetType = "beverage-gauge" | "abv-gauge" | "rating-gauge";
+
+export interface PubWidgetConfig {
+  id: string;
+  type: PubWidgetType;
+  label: string;
+  keyword?: string; // beverage-gauge only: substring matched against beerName/beerStyle
+}
+
 export interface Pub {
   id: string;
   name: string;
@@ -80,6 +89,7 @@ export interface Pub {
   members: string[];
   invited: string[];
   emblem?: string;
+  widgets?: PubWidgetConfig[]; // customizable Awards-tab gauge widgets; undefined = default Guinness gauge
 }
 
 export interface PubChatMessage {

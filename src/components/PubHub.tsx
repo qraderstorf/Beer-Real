@@ -5,7 +5,7 @@ import {
   Sparkles, Edit2, Image, Smile, Send, UserPlus, X, 
   Trophy, Award, Zap, Moon, Coffee, Crown, ArrowLeft, TrendingUp, 
   Beer, Star, Calendar, ChevronRight, ChevronDown, Pin, Filter, BarChart3, LineChart as LineChartIcon,
-  MessageSquare, Flame
+  MessageSquare, Flame, Settings2, Gauge
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -19,7 +19,7 @@ import {
   Tooltip,
   Legend
 } from "recharts";
-import { Pub, UserProfile, BeerLog, PubChatMessage } from "../types";
+import { Pub, UserProfile, BeerLog, PubChatMessage, PubWidgetConfig } from "../types";
 import { getMostDrankBeerForUser, isImposterLog } from "../utils";
 import UserAvatar from "./UserAvatar";
 
@@ -333,6 +333,13 @@ export default function PubHub({
   const [rallySending, setRallySending] = useState(false);
   const [rallySentNotice, setRallySentNotice] = useState<string | null>(null);
   const [chatRefreshKey, setChatRefreshKey] = useState(0);
+
+  // Customizable Awards-tab widgets state
+  const [showWidgetModal, setShowWidgetModal] = useState(false);
+  const [draftWidgets, setDraftWidgets] = useState<PubWidgetConfig[]>([]);
+  const [newBeverageKeyword, setNewBeverageKeyword] = useState("");
+  const [widgetSaving, setWidgetSaving] = useState(false);
+  const [widgetError, setWidgetError] = useState("");
 
   const toggleBeaconInvitee = (username: string) => {
     setBeaconInvitees((prev) =>
@@ -664,6 +671,147 @@ export default function PubHub({
     const members = activePub.members;
     return combinedLogs.filter(log => members.includes(log.user) && !isImposterLog(log));
   }, [activePub, combinedLogs]);
+
+  // ---------------------------------------------------------------------------
+  // CUSTOMIZABLE AWARDS-TAB GAUGE WIDGETS
+  // ---------------------------------------------------------------------------
+  const DEFAULT_PUB_WIDGETS: PubWidgetConfig[] = [
+    { id: "default-guinness", type: "beverage-gauge", label: "Is it a Guinness?", keyword: "guinness" },
+  ];
+
+  const WIDGET_CATALOG: { type: PubWidgetConfig["type"]; name: string; blurb: string; icon: typeof Beer }[] = [
+    { type: "beverage-gauge", name: "Beverage Gauge", blurb: "% of pints matching a beer or style you pick", icon: Beer },
+    { type: "abv-gauge", name: "ABV-O-Meter", blurb: "Average booze strength of pints logged here", icon: Gauge },
+    { type: "rating-gauge", name: "Rating-O-Meter", blurb: "Average star rating of pints logged here", icon: Star },
+  ];
+
+  const activeWidgets: PubWidgetConfig[] = activePub?.widgets ?? DEFAULT_PUB_WIDGETS;
+
+  const widgetSubtitle = (widget: PubWidgetConfig): string => {
+    const pubName = activePub?.name || "this Pub";
+    if (widget.type === "beverage-gauge") return `"${widget.keyword}" vs other pints logged in ${pubName}`;
+    if (widget.type === "abv-gauge") return `Average ABV of pints logged in ${pubName}`;
+    return `Average star rating of pints logged in ${pubName}`;
+  };
+
+  const computeWidgetData = (widget: PubWidgetConfig) => {
+    const logs = activePubFilteredLogs;
+    const total = logs.length;
+
+    if (widget.type === "abv-gauge") {
+      const withAbv = logs.filter((l) => typeof l.abv === "number" && l.abv > 0);
+      const avgAbv = withAbv.length ? withAbv.reduce((s, l) => s + l.abv, 0) / withAbv.length : 0;
+      const percent = Math.max(0, Math.min(100, Math.round((avgAbv / 12) * 100)));
+      const strongCount = withAbv.filter((l) => l.abv >= 7).length;
+      const ratingText =
+        avgAbv < 4 ? "🍃 Light and breezy sipping around here." :
+        avgAbv < 7 ? "⚖️ Solidly middle-of-the-road strength." :
+        "🔥 Heavy hitters only. Hydrate accordingly.";
+      return {
+        percent,
+        bigNumber: `${avgAbv.toFixed(1)}%`,
+        legendA: { label: "Strong (7%+ ABV)", stat: `${strongCount} pints`, swatchClass: "bg-red-500/70 border-2 border-red-700" },
+        legendB: { label: "Sessionable (<7% ABV)", stat: `${withAbv.length - strongCount} pints`, swatchClass: "bg-sky-400/60 border-2 border-sky-600" },
+        ratingText,
+      };
+    }
+
+    if (widget.type === "rating-gauge") {
+      const rated = logs.filter((l) => typeof l.rating === "number" && l.rating > 0);
+      const avgRating = rated.length ? rated.reduce((s, l) => s + l.rating, 0) / rated.length : 0;
+      const percent = Math.max(0, Math.min(100, Math.round((avgRating / 5) * 100)));
+      const bangers = rated.filter((l) => l.rating >= 4).length;
+      const ratingText =
+        avgRating < 2.5 ? "😬 Rough batch of pours lately." :
+        avgRating < 4 ? "⚖️ Respectable average, nothing legendary." :
+        "🌟 A murderers' row of excellent pints.";
+      return {
+        percent,
+        bigNumber: `${avgRating.toFixed(1)}★`,
+        legendA: { label: "4★+ Bangers", stat: `${bangers} pints`, swatchClass: "bg-amber-400/80 border-2 border-amber-600" },
+        legendB: { label: "Meh (<4★)", stat: `${rated.length - bangers} pints`, swatchClass: "bg-slate-400/50 border-2 border-slate-600" },
+        ratingText,
+      };
+    }
+
+    // beverage-gauge (default)
+    const kw = (widget.keyword || "").toLowerCase().trim();
+    const matchCount = kw
+      ? logs.filter((l) => l.beerName?.toLowerCase().includes(kw) || l.beerStyle?.toLowerCase().includes(kw)).length
+      : 0;
+    const percent = total > 0 ? Math.round((matchCount / total) * 100) : 0;
+    const ratingText =
+      percent < 25 ? `🚨 Rare pour. Time to find some ${widget.keyword}.` :
+      percent < 75 ? `⚖️ Decent showing of ${widget.keyword} around here.` :
+      `✨ ${widget.keyword} everywhere! Living the dream.`;
+    return {
+      percent,
+      bigNumber: `${percent}%`,
+      legendA: { label: widget.keyword || "Match", stat: `${matchCount} (${percent}%)`, swatchClass: "bg-[#FDFBF7] border-2 border-[#C5A059]" },
+      legendB: { label: `Not ${widget.keyword || "a match"}`, stat: `${total - matchCount} (${total > 0 ? 100 - percent : 0}%)`, swatchClass: "bg-[#7E7770] border-2 border-[#645F5A]" },
+      ratingText,
+    };
+  };
+
+  const openWidgetModal = () => {
+    setDraftWidgets(activeWidgets);
+    setNewBeverageKeyword("");
+    setWidgetError("");
+    setShowWidgetModal(true);
+  };
+
+  const addCatalogWidget = (type: PubWidgetConfig["type"]) => {
+    if (draftWidgets.length >= 6) {
+      setWidgetError("A Pub can have at most 6 widgets.");
+      return;
+    }
+    if (type === "beverage-gauge") {
+      const kw = newBeverageKeyword.trim();
+      if (!kw) {
+        setWidgetError("Type a beer or style to add a Beverage Gauge.");
+        return;
+      }
+      setDraftWidgets((prev) => [...prev, { id: `widget-${Date.now()}`, type, label: `Is it a ${kw}?`, keyword: kw }]);
+      setNewBeverageKeyword("");
+      setWidgetError("");
+      return;
+    }
+    if (draftWidgets.some((w) => w.type === type)) {
+      setWidgetError("You already have one of those.");
+      return;
+    }
+    const name = WIDGET_CATALOG.find((c) => c.type === type)?.name || "Widget";
+    setDraftWidgets((prev) => [...prev, { id: `widget-${Date.now()}`, type, label: name }]);
+    setWidgetError("");
+  };
+
+  const removeDraftWidget = (id: string) => {
+    setDraftWidgets((prev) => prev.filter((w) => w.id !== id));
+  };
+
+  const handleSaveWidgets = async () => {
+    if (!activePub) return;
+    setWidgetSaving(true);
+    setWidgetError("");
+    try {
+      const response = await fetch(`/api/pubs/${activePub.id}/widgets`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentUser, widgets: draftWidgets }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || "Could not save widgets.");
+      }
+      const updatedPub: Pub = await response.json();
+      onPubUpdated(updatedPub);
+      setShowWidgetModal(false);
+    } catch (err: any) {
+      setWidgetError(err.message || "An error occurred.");
+    } finally {
+      setWidgetSaving(false);
+    }
+  };
 
   // Leaderboard ranking
   const pubLeaderboard = useMemo(() => {
@@ -1109,7 +1257,7 @@ export default function PubHub({
           onClick={() => {
             setShowBeaconModal(true);
             setBeaconError("");
-            setBeaconInvitees(rallyCandidates);
+            setBeaconInvitees((activePub.members || []).filter((m) => m !== currentUser));
           }}
           disabled={rallySending}
           className="w-full flex items-center gap-3 px-4 py-4 bg-gradient-to-r from-amber-500 via-orange-500 to-red-600 rounded-2xl shadow-lg hover:brightness-110 active:scale-[0.99] transition-all cursor-pointer text-left"
@@ -1663,163 +1811,118 @@ export default function PubHub({
         </div>
       )}
 
-      {/* 3. GUINNESS GAUGE TAB */}
+      {/* 3. GAUGE WIDGETS (customizable) */}
       {activeTab === "awards" && (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs p-4 sm:p-5 space-y-4">
-          <div className="border-b border-slate-100 dark:border-slate-800 pb-3 flex justify-between items-center">
-            <div>
-              <h3 className="text-xs sm:text-sm font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                <Beer className="w-4 h-4 text-amber-500" />
-                Is it a Guinness?
-              </h3>
-              <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5">Creamy stout vs other craft beers logged in {activePub?.name || "this Pub"}</p>
-            </div>
-          </div>
+        <div className="space-y-3">
+          {activeWidgets.map((widget) => {
+            const data = computeWidgetData(widget);
+            const angleDegrees = 180 - (data.percent / 100) * 180;
+            const angleRad = (angleDegrees * Math.PI) / 180;
+            const cx = 100, cy = 100, needleLen = 58;
+            const nx = cx + needleLen * Math.cos(angleRad);
+            const ny = cy - needleLen * Math.sin(angleRad);
+            let ratingBg = "bg-amber-500/5", ratingBorder = "border-amber-500/20";
+            if (data.percent < 25) { ratingBg = "bg-rose-500/5"; ratingBorder = "border-rose-500/20"; }
+            else if (data.percent >= 75) { ratingBg = "bg-emerald-500/5"; ratingBorder = "border-emerald-500/20"; }
+            const gGold = `pubGoldGrad-${widget.id}`;
+            const gGauge = `pubGaugeGrad-${widget.id}`;
+            const gRim = `pubRimGrad-${widget.id}`;
 
-          <div className="flex flex-col items-center justify-center py-2">
-            {activePubFilteredLogs.length === 0 ? (
-              <div className="w-full h-40 flex items-center justify-center text-slate-400 italic text-xs">No logs within filtered period</div>
-            ) : (() => {
-              const totalBeers = activePubFilteredLogs.length;
-              const guinnessCount = activePubFilteredLogs.filter(log => log.beerName && log.beerName.toLowerCase().includes("guinness")).length;
-              const otherCount = totalBeers - guinnessCount;
-              const guinnessPercent = totalBeers > 0 ? Math.round((guinnessCount / totalBeers) * 100) : 0;
-              const otherPercent = totalBeers > 0 ? 100 - guinnessPercent : 0;
-              
-              const angleDegrees = 180 - (guinnessPercent / 100) * 180;
-              const angleRad = (angleDegrees * Math.PI) / 180;
-              const cx = 100;
-              const cy = 100;
-              const needleLen = 58;
-              const nx = cx + needleLen * Math.cos(angleRad);
-              const ny = cy - needleLen * Math.sin(angleRad);
-
-              let ratingDesc = "";
-              let ratingBg = "";
-              let ratingBorder = "";
-
-              if (guinnessPercent < 25) {
-                ratingDesc = "🚨 Muddy and flat choices! Go find a pint of the black stuff immediately.";
-                ratingBg = "bg-rose-500/5";
-                ratingBorder = "border-rose-500/20";
-              } else if (guinnessPercent >= 25 && guinnessPercent < 75) {
-                ratingDesc = "⚖️ Average. Tolerable balance, but your soul still yearns for more creamy foam.";
-                ratingBg = "bg-amber-500/5";
-                ratingBorder = "border-amber-500/20";
-              } else {
-                ratingDesc = "✨ Stout Heaven! Absolute velvet perfection in your decision making.";
-                ratingBg = "bg-emerald-500/5";
-                ratingBorder = "border-emerald-500/20";
-              }
-              
-              return (
-                <div className="w-full flex flex-col items-center">
-                  {/* Gauge Widget */}
-                  <div className="w-full max-w-[240px] aspect-[1.8/1] relative flex items-center justify-center">
-                    <svg className="w-full h-full overflow-visible" viewBox="0 0 200 120">
-                      <defs>
-                        <linearGradient id="pubGoldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                          <stop offset="0%" stopColor="#C5A059" />
-                          <stop offset="50%" stopColor="#E2C58F" />
-                          <stop offset="100%" stopColor="#8A662D" />
-                        </linearGradient>
-                        <linearGradient id="pubGuinnessGaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                          <stop offset="0%" stopColor="#7E7770" />
-                          <stop offset="45%" stopColor="#4A4139" />
-                          <stop offset="75%" stopColor="#1E1B18" />
-                          <stop offset="100%" stopColor="#0B0908" />
-                        </linearGradient>
-                        <linearGradient id="pubGoldRimGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                          <stop offset="0%" stopColor="#94A3B8" />
-                          <stop offset="50%" stopColor="#D97706" />
-                          <stop offset="100%" stopColor="#FBBF24" />
-                        </linearGradient>
-                      </defs>
-
-                      <path
-                        d="M 30,100 A 70,70 0 0,1 170,100"
-                        fill="none"
-                        stroke="#f1f5f9"
-                        strokeWidth="11"
-                        strokeLinecap="round"
-                      />
-
-                      <path
-                        d="M 30,100 A 70,70 0 0,1 170,100"
-                        fill="none"
-                        stroke="url(#pubGuinnessGaugeGrad)"
-                        strokeWidth="11"
-                        strokeLinecap="round"
-                      />
-
-                      <path
-                        d="M 24,100 A 76,76 0 0,1 176,100"
-                        fill="none"
-                        stroke="url(#pubGoldRimGrad)"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        opacity="0.9"
-                      />
-
-                      <g>
-                        <line
-                          x1={cx}
-                          y1={cy}
-                          x2={nx}
-                          y2={ny}
-                          stroke="#C5A059"
-                          strokeWidth="3.5"
-                          strokeLinecap="round"
-                        />
-                        <line
-                          x1={cx}
-                          y1={cy}
-                          x2={nx}
-                          y2={ny}
-                          stroke="#1E1B18"
-                          strokeWidth="1"
-                          strokeLinecap="round"
-                        />
-                        <circle cx={cx} cy={cy} r="8" fill="url(#pubGoldGrad)" />
-                        <circle cx={cx} cy={cy} r="4" fill="#1E1B18" />
-                        <circle cx={cx} cy={cy} r="1.5" fill="#FDFBF7" />
-                      </g>
-
-                      <text x="21" y="118" textAnchor="middle" className="text-[9px] font-extrabold fill-slate-400 uppercase">0%</text>
-                      <text x="179" y="118" textAnchor="middle" className="text-[9px] font-extrabold fill-slate-400 uppercase">100%</text>
-                      <text x="100" y="15" textAnchor="middle" fill="url(#pubGoldGrad)" className="text-[20px] font-black font-mono tracking-tight">{guinnessPercent}%</text>
-                    </svg>
-                  </div>
-
-                  {/* Rating review banner */}
-                  <div className={`w-full max-w-sm mt-2 p-3 rounded-xl border ${ratingBg} ${ratingBorder} text-center shadow-xs`}>
-                    <p className="text-xs font-bold text-slate-700 dark:text-slate-300 leading-relaxed">
-                      {ratingDesc}
-                    </p>
-                  </div>
-                  
-                  {/* Legend / Details */}
-                  <div className="w-full mt-3 flex flex-col gap-2 max-w-sm mx-auto">
-                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/20 shadow-2xs">
-                      <div className="flex items-center gap-2.5">
-                        <span className="w-3.5 h-3.5 rounded-md shrink-0 bg-[#FDFBF7] border-2 border-[#C5A059]" />
-                        <span className="font-extrabold text-xs text-slate-800 dark:text-slate-200">Creamy Pint of Guinness</span>
-                      </div>
-                      <span className="font-mono text-xs font-black text-amber-600 dark:text-amber-400">{guinnessCount} ({guinnessPercent}%)</span>
-                    </div>
-
-                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 shadow-2xs">
-                      <div className="flex items-center gap-2.5">
-                        <span className="w-3.5 h-3.5 rounded-md shrink-0 bg-[#7E7770] border-2 border-[#645F5A]" />
-                        <span className="font-extrabold text-xs text-slate-600 dark:text-slate-400">Not a Guinness</span>
-                      </div>
-                      <span className="font-mono text-xs font-bold text-slate-500 dark:text-slate-400">{otherCount} ({otherPercent}%)</span>
-                    </div>
+            return (
+              <div key={widget.id} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs p-4 sm:p-5 space-y-4">
+                <div className="border-b border-slate-100 dark:border-slate-800 pb-3 flex justify-between items-center">
+                  <div>
+                    <h3 className="text-xs sm:text-sm font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                      <Beer className="w-4 h-4 text-amber-500" />
+                      {widget.label}
+                    </h3>
+                    <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5">{widgetSubtitle(widget)}</p>
                   </div>
                 </div>
-              );
-            })()}
-          </div>
+
+                <div className="flex flex-col items-center justify-center py-2">
+                  {activePubFilteredLogs.length === 0 ? (
+                    <div className="w-full h-40 flex items-center justify-center text-slate-400 italic text-xs">No logs within filtered period</div>
+                  ) : (
+                    <div className="w-full flex flex-col items-center">
+                      {/* Gauge Widget */}
+                      <div className="w-full max-w-[240px] aspect-[1.8/1] relative flex items-center justify-center">
+                        <svg className="w-full h-full overflow-visible" viewBox="0 0 200 120">
+                          <defs>
+                            <linearGradient id={gGold} x1="0%" y1="0%" x2="100%" y2="100%">
+                              <stop offset="0%" stopColor="#C5A059" />
+                              <stop offset="50%" stopColor="#E2C58F" />
+                              <stop offset="100%" stopColor="#8A662D" />
+                            </linearGradient>
+                            <linearGradient id={gGauge} x1="0%" y1="0%" x2="100%" y2="0%">
+                              <stop offset="0%" stopColor="#7E7770" />
+                              <stop offset="45%" stopColor="#4A4139" />
+                              <stop offset="75%" stopColor="#1E1B18" />
+                              <stop offset="100%" stopColor="#0B0908" />
+                            </linearGradient>
+                            <linearGradient id={gRim} x1="0%" y1="0%" x2="100%" y2="0%">
+                              <stop offset="0%" stopColor="#94A3B8" />
+                              <stop offset="50%" stopColor="#D97706" />
+                              <stop offset="100%" stopColor="#FBBF24" />
+                            </linearGradient>
+                          </defs>
+
+                          <path d="M 30,100 A 70,70 0 0,1 170,100" fill="none" stroke="#f1f5f9" strokeWidth="11" strokeLinecap="round" />
+                          <path d="M 30,100 A 70,70 0 0,1 170,100" fill="none" stroke={`url(#${gGauge})`} strokeWidth="11" strokeLinecap="round" />
+                          <path d="M 24,100 A 76,76 0 0,1 176,100" fill="none" stroke={`url(#${gRim})`} strokeWidth="1.5" strokeLinecap="round" opacity="0.9" />
+
+                          <g>
+                            <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="#C5A059" strokeWidth="3.5" strokeLinecap="round" />
+                            <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="#1E1B18" strokeWidth="1" strokeLinecap="round" />
+                            <circle cx={cx} cy={cy} r="8" fill={`url(#${gGold})`} />
+                            <circle cx={cx} cy={cy} r="4" fill="#1E1B18" />
+                            <circle cx={cx} cy={cy} r="1.5" fill="#FDFBF7" />
+                          </g>
+
+                          <text x="21" y="118" textAnchor="middle" className="text-[9px] font-extrabold fill-slate-400 uppercase">0%</text>
+                          <text x="179" y="118" textAnchor="middle" className="text-[9px] font-extrabold fill-slate-400 uppercase">100%</text>
+                          <text x="100" y="15" textAnchor="middle" fill={`url(#${gGold})`} className="text-[20px] font-black font-mono tracking-tight">{data.bigNumber}</text>
+                        </svg>
+                      </div>
+
+                      {/* Rating review banner */}
+                      <div className={`w-full max-w-sm mt-2 p-3 rounded-xl border ${ratingBg} ${ratingBorder} text-center shadow-xs`}>
+                        <p className="text-xs font-bold text-slate-700 dark:text-slate-300 leading-relaxed">{data.ratingText}</p>
+                      </div>
+
+                      {/* Legend / Details */}
+                      <div className="w-full mt-3 flex flex-col gap-2 max-w-sm mx-auto">
+                        <div className="flex items-center justify-between p-2.5 rounded-xl bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/20 shadow-2xs">
+                          <div className="flex items-center gap-2.5">
+                            <span className={`w-3.5 h-3.5 rounded-md shrink-0 ${data.legendA.swatchClass}`} />
+                            <span className="font-extrabold text-xs text-slate-800 dark:text-slate-200 capitalize">{data.legendA.label}</span>
+                          </div>
+                          <span className="font-mono text-xs font-black text-amber-600 dark:text-amber-400">{data.legendA.stat}</span>
+                        </div>
+
+                        <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 shadow-2xs">
+                          <div className="flex items-center gap-2.5">
+                            <span className={`w-3.5 h-3.5 rounded-md shrink-0 ${data.legendB.swatchClass}`} />
+                            <span className="font-extrabold text-xs text-slate-600 dark:text-slate-400 capitalize">{data.legendB.label}</span>
+                          </div>
+                          <span className="font-mono text-xs font-bold text-slate-500 dark:text-slate-400">{data.legendB.stat}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+
+          <button
+            type="button"
+            onClick={openWidgetModal}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 font-bold text-xs hover:border-amber-400 hover:text-amber-600 dark:hover:text-amber-400 transition-colors cursor-pointer"
+          >
+            <Settings2 className="w-3.5 h-3.5" />
+            Customize Widgets
+          </button>
         </div>
       )}
       {/* Modal to Establish Pub */}
@@ -1964,6 +2067,152 @@ export default function PubHub({
                     {submitting ? "Establishing Pub..." : "Establish Pub 🍻"}
                   </button>
                 </form>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Customize Widgets Modal */}
+      <AnimatePresence>
+        {showWidgetModal && (
+          <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md shadow-2xl flex flex-col overflow-hidden max-h-[92vh]"
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between border-b border-slate-800/80 px-5 py-4 shrink-0">
+                <h3 className="font-extrabold text-slate-100 text-sm sm:text-base flex items-center gap-2">
+                  <Settings2 className="w-5 h-5 text-amber-500" />
+                  Customize Widgets
+                </h3>
+                <button type="button" onClick={() => setShowWidgetModal(false)} className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 cursor-pointer">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="overflow-y-auto px-5 py-4 space-y-5">
+                {/* Active widgets */}
+                <div>
+                  <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 mb-2">
+                    Your Widgets ({draftWidgets.length}/6)
+                  </p>
+                  {draftWidgets.length === 0 ? (
+                    <p className="text-xs text-slate-500 italic p-3 rounded-xl border border-dashed border-slate-700 text-center">
+                      No widgets yet — add one below.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {draftWidgets.map((w) => {
+                        const catalogEntry = WIDGET_CATALOG.find((c) => c.type === w.type);
+                        const Icon = catalogEntry?.icon || Beer;
+                        return (
+                          <div key={w.id} className="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/60">
+                            <Icon className="w-4 h-4 text-amber-500 shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-bold text-slate-100 truncate">{w.label}</p>
+                              <p className="text-[10px] text-slate-500">{catalogEntry?.name}</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeDraftWidget(w.id)}
+                              className="p-1.5 rounded-lg hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 cursor-pointer shrink-0"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Add a widget */}
+                <div>
+                  <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 mb-2">Add a Widget</p>
+                  <div className="space-y-2">
+                    {/* Beverage Gauge - needs a keyword */}
+                    <div className="p-3 rounded-xl bg-slate-800/40 border border-slate-700/60 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Beer className="w-4 h-4 text-amber-500 shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-slate-100">Beverage Gauge</p>
+                          <p className="text-[10px] text-slate-500">% of pints matching a beer or style you pick</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={newBeverageKeyword}
+                          onChange={(e) => setNewBeverageKeyword(e.target.value)}
+                          placeholder="e.g. IPA, Guinness, Sour"
+                          maxLength={30}
+                          className="flex-1 min-w-0 px-3 py-2 text-xs rounded-lg bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => addCatalogWidget("beverage-gauge")}
+                          className="px-3 py-2 rounded-lg bg-amber-500 text-slate-950 text-xs font-extrabold hover:brightness-110 cursor-pointer shrink-0"
+                        >
+                          Add
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Fixed-config widgets */}
+                    {WIDGET_CATALOG.filter((c) => c.type !== "beverage-gauge").map((c) => {
+                      const Icon = c.icon;
+                      const alreadyAdded = draftWidgets.some((w) => w.type === c.type);
+                      return (
+                        <div key={c.type} className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-800/40 border border-slate-700/60">
+                          <Icon className="w-4 h-4 text-amber-500 shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-bold text-slate-100">{c.name}</p>
+                            <p className="text-[10px] text-slate-500">{c.blurb}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => addCatalogWidget(c.type)}
+                            disabled={alreadyAdded}
+                            className="px-3 py-2 rounded-lg bg-amber-500 text-slate-950 text-xs font-extrabold hover:brightness-110 cursor-pointer shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            {alreadyAdded ? "Added" : "Add"}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {widgetError && (
+                  <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400 text-xs font-semibold flex items-center gap-2">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    {widgetError}
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="flex items-center gap-2.5 border-t border-slate-800/80 px-5 py-4 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowWidgetModal(false)}
+                  className="flex-1 py-2.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-extrabold hover:bg-slate-700 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveWidgets}
+                  disabled={widgetSaving}
+                  className="flex-1 py-2.5 rounded-xl bg-amber-500 text-slate-950 text-xs font-extrabold hover:brightness-110 cursor-pointer disabled:opacity-60"
+                >
+                  {widgetSaving ? "Saving..." : "Save Widgets"}
+                </button>
               </div>
             </motion.div>
           </div>
