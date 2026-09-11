@@ -1419,8 +1419,8 @@ export default function PubHub({
 
       {/* Beacon Rally Modal - who, where, and go */}
       {showBeaconModal && activePub && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-slate-900 border-2 border-orange-500/60 rounded-2xl p-5 max-w-md w-full shadow-2xl space-y-4 relative animate-in fade-in zoom-in-95 max-h-[85vh] overflow-y-auto">
+        <div className="fixed inset-0 z-[110] bg-slate-950/80 backdrop-blur-xs flex items-start sm:items-center justify-center overflow-y-auto p-4 py-6">
+          <div className="bg-slate-900 border-2 border-orange-500/60 rounded-2xl p-5 max-w-md w-full shadow-2xl space-y-4 relative animate-in fade-in zoom-in-95 max-h-[85dvh] overflow-y-auto">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 bg-orange-500/20 border border-orange-500/50 rounded-xl text-orange-400">
@@ -2224,13 +2224,13 @@ export default function PubHub({
       {/* Modal to Establish Pub */}
       <AnimatePresence>
         {showCreateModal && (
-          <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+          <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-[110] flex items-start sm:items-center justify-center overflow-y-auto p-3 sm:p-4 py-6 animate-in fade-in duration-200">
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 15 }}
               transition={{ duration: 0.2, ease: "easeOut" }}
-              className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md shadow-2xl flex flex-col overflow-hidden max-h-[92vh]"
+              className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md shadow-2xl flex flex-col overflow-hidden max-h-[92dvh]"
             >
               {/* Modal Header */}
               <div className="flex items-center justify-between border-b border-slate-800/80 px-5 py-4 shrink-0">
@@ -2372,13 +2372,13 @@ export default function PubHub({
       {/* Customize Widgets Modal */}
       <AnimatePresence>
         {showWidgetModal && (
-          <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+          <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-[110] flex items-start sm:items-center justify-center overflow-y-auto p-3 sm:p-4 py-6 animate-in fade-in duration-200">
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 15 }}
               transition={{ duration: 0.2, ease: "easeOut" }}
-              className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md shadow-2xl flex flex-col overflow-hidden max-h-[92vh]"
+              className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md shadow-2xl flex flex-col overflow-hidden max-h-[92dvh]"
             >
               {/* Modal Header */}
               <div className="flex items-center justify-between border-b border-slate-800/80 px-5 py-4 shrink-0">
