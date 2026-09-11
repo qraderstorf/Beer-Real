@@ -344,6 +344,13 @@ export default function PubHub({
   const [rallySentNotice, setRallySentNotice] = useState<string | null>(null);
   const [chatRefreshKey, setChatRefreshKey] = useState(0);
 
+  // Banter & Chat is minimized to a collapsible strip (Widgets/Superlatives
+  // are the primary tabs now). A one-shot fetch keeps a lightweight preview
+  // of the latest message without running the full chat's polling loop
+  // until the user actually expands it.
+  const [chatExpanded, setChatExpanded] = useState(false);
+  const [latestPubMessage, setLatestPubMessage] = useState<PubChatMessage | null>(null);
+
   // Customizable Awards-tab widgets state
   const [showWidgetModal, setShowWidgetModal] = useState(false);
   const [draftWidgets, setDraftWidgets] = useState<PubWidgetConfig[]>([]);
@@ -376,6 +383,7 @@ export default function PubHub({
         setBeaconError("");
         setBeaconInvitees([]);
         setChatRefreshKey(prev => prev + 1);
+        setChatExpanded(true);
         setTimeout(() => setRallySentNotice(null), 6000);
       }
     } catch (e) {
@@ -410,8 +418,10 @@ export default function PubHub({
   // Local selection override state
   const [localPubId, setLocalPubId] = useState<string | null>(null);
   
-  // Mobile-first active tab state: "chat" | "awards" (Honor Roll + Guinness Gauge merged)
-  const [activeTab, setActiveTab] = useState<"chat" | "awards">("chat");
+  // Mobile-first active tab state. Chat lives in its own collapsible strip
+  // now, so the tabs are just Widgets (default, most prominent) and
+  // Superlatives.
+  const [activeTab, setActiveTab] = useState<"widgets" | "superlatives">("widgets");
 
   // Current week number for weekly rotating superlatives
   const currentWeekNum = useMemo(() => {
@@ -437,6 +447,24 @@ export default function PubHub({
   const activePub = useMemo(() => {
     return pubs.find(p => p.id === activePubId);
   }, [pubs, activePubId]);
+
+  useEffect(() => {
+    if (!activePubId) {
+      setLatestPubMessage(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/pubs/${encodeURIComponent(activePubId)}/messages`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: PubChatMessage[]) => {
+        if (cancelled) return;
+        setLatestPubMessage(Array.isArray(data) && data.length > 0 ? data[data.length - 1] : null);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [activePubId, chatRefreshKey]);
 
   // Who can be rallied: current pub members plus the caller's own friends, so a
   // beacon can invite people out even if they haven't joined this Pub group yet.
@@ -1741,33 +1769,76 @@ export default function PubHub({
         </div>
       )}
 
-      {/* TAB SWITCHER - Honor Roll and Gauge merged into one "Awards" tab, so this
-          page's primary nav is 2 choices, not 3 competing for attention */}
+      {/* Banter & Chat - minimized to a collapsible strip. Beacon calls land
+          here as regular messages, so lighting a beacon auto-expands it. */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setChatExpanded((v) => !v)}
+          className="w-full flex items-center justify-between gap-2 px-4 py-3 cursor-pointer text-left"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <MessageSquare className="w-4 h-4 text-amber-500 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-xs font-extrabold text-slate-800 dark:text-slate-100">Banter & Chat</p>
+              {latestPubMessage ? (
+                latestPubMessage.text?.includes("BEACONS ARE LIT") ? (
+                  <p className="text-[10px] font-bold text-orange-500 truncate max-w-[220px] sm:max-w-xs">
+                    🔥 @{latestPubMessage.user} lit the beacons!
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-slate-400 truncate max-w-[220px] sm:max-w-xs">
+                    {latestPubMessage.user}: {latestPubMessage.text}
+                  </p>
+                )
+              ) : (
+                <p className="text-[10px] text-slate-400">No messages yet — tap to say something</p>
+              )}
+            </div>
+          </div>
+          <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 transition-transform ${chatExpanded ? "rotate-180" : ""}`} />
+        </button>
+        {chatExpanded && (
+          <div className="px-4 pb-4 -mt-1 border-t border-slate-100 dark:border-slate-800 pt-3">
+            <PubChatSection
+              pubId={activePub?.id || ""}
+              pubName={activePub?.name || "Pub"}
+              pubOwner={activePub?.owner || "System"}
+              currentUser={currentUser}
+              users={users}
+              onViewProfileRequested={onViewProfileRequested}
+              messageRefreshKey={chatRefreshKey}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* TAB SWITCHER - Widgets is the primary/default tab, Superlatives second */}
       <div className="flex items-center gap-1.5 p-1.5 bg-slate-100 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xs">
         <button
           type="button"
-          onClick={() => setActiveTab("chat")}
+          onClick={() => setActiveTab("widgets")}
           className={`flex-1 py-2 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap min-h-[38px] ${
-            activeTab === "chat"
+            activeTab === "widgets"
               ? "bg-amber-500 text-slate-950 shadow-xs"
               : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
           }`}
         >
-          <MessageSquare className="w-3.5 h-3.5" />
-          <span>Banter</span>
+          <Gauge className="w-3.5 h-3.5" />
+          <span>Widgets</span>
         </button>
 
         <button
           type="button"
-          onClick={() => setActiveTab("awards")}
+          onClick={() => setActiveTab("superlatives")}
           className={`flex-1 py-2 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap min-h-[38px] ${
-            activeTab === "awards"
+            activeTab === "superlatives"
               ? "bg-amber-500 text-slate-950 shadow-xs"
               : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
           }`}
         >
           <Award className="w-3.5 h-3.5" />
-          <span>Awards</span>
+          <span>Superlatives</span>
         </button>
       </div>
 
@@ -1785,24 +1856,8 @@ export default function PubHub({
         </div>
       )}
 
-      {/* 1. BANTER TAB */}
-      {activeTab === "chat" && (
-        <div className="space-y-3">
-          {/* Live Chat Box */}
-          <PubChatSection
-            pubId={activePub?.id || ""}
-            pubName={activePub?.name || "Pub"}
-            pubOwner={activePub?.owner || "System"}
-            currentUser={currentUser}
-            users={users}
-            onViewProfileRequested={onViewProfileRequested}
-            messageRefreshKey={chatRefreshKey}
-          />
-        </div>
-      )}
-
-      {/* 2. HONOR ROLL / SUPERLATIVES TAB */}
-      {activeTab === "awards" && pubSuperlatives && (
+      {/* HONOR ROLL / SUPERLATIVES TAB */}
+      {activeTab === "superlatives" && pubSuperlatives && (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs p-4 sm:p-5 space-y-3.5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 gap-2.5">
             <div>
@@ -1918,8 +1973,8 @@ export default function PubHub({
         </div>
       )}
 
-      {/* 3. GAUGE WIDGETS (customizable) */}
-      {activeTab === "awards" && (
+      {/* GAUGE WIDGETS (customizable) */}
+      {activeTab === "widgets" && (
         <div className="space-y-3">
           {activeWidgets.map((widget) => {
             const catalogEntry = WIDGET_CATALOG.find((c) => c.type === widget.type);
