@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Beer,
@@ -85,8 +85,26 @@ export default function Statistics({
   onViewProfileRequested,
   clientUseFirestore
 }: StatisticsProps) {
+  // Defaults to whichever window actually has check-ins (This Week -> This
+  // Month -> All Time), same idea as the Pub Hub Superlatives fix, so a
+  // quiet week doesn't just render a blank Ledger. A manual pill click locks
+  // it in place; switching pubs re-arms the auto-pick.
   const [rangeFilter, setRangeFilter] = useState<"all_time" | "this_month" | "last_week" | "this_week">("this_week");
+  const [rangeFilterLocked, setRangeFilterLocked] = useState(false);
+  const lastAutoRangePubIdRef = useRef<string | undefined>(undefined);
   const [barLayout, setBarLayout] = useState<"stacked" | "grouped">("stacked");
+
+  const selectRangeFilter = (filter: "all_time" | "this_month" | "last_week" | "this_week") => {
+    setRangeFilter(filter);
+    setRangeFilterLocked(true);
+  };
+
+  useEffect(() => {
+    if (lastAutoRangePubIdRef.current !== selectedPubId) {
+      lastAutoRangePubIdRef.current = selectedPubId;
+      setRangeFilterLocked(false);
+    }
+  }, [selectedPubId]);
 
   const [leaderboardBeers, setLeaderboardBeers] = useState<BeerLog[]>([]);
   const [pubMemberStats, setPubMemberStats] = useState<Record<string, { totalPints: number; avgRating: number; avgAbv: number }>>({});
@@ -299,6 +317,18 @@ export default function Statistics({
 
           setLeaderboardBeers(fetchedBeers);
           setPubMemberStats(statsMap);
+
+          // Auto-widen to the next timeframe if this one came up empty and
+          // the user hasn't manually picked a filter for this pub view yet.
+          // Checked against the scoped per-member stats (not the raw fetched
+          // beers, which can include other users' logs merged in from props
+          // that fall in-range but outside this pub) so this matches what
+          // the Ledger's own "No logs" empty state is actually keyed on.
+          const hasAnyPints = targetUserIds.some((id) => (statsMap[id]?.totalPints || 0) > 0);
+          if (!rangeFilterLocked && !hasAnyPints) {
+            if (rangeFilter === "this_week") setRangeFilter("this_month");
+            else if (rangeFilter === "this_month") setRangeFilter("all_time");
+          }
         }
       } catch (err) {
         console.error("Failed to fetch leaderboard beers:", err);
@@ -313,7 +343,7 @@ export default function Statistics({
     return () => {
       isMounted = false;
     };
-  }, [rangeFilter, clientUseFirestore, absoluteMinDate, selectedPubId, pubs, logs, currentUser]);
+  }, [rangeFilter, clientUseFirestore, absoluteMinDate, selectedPubId, pubs, logs, currentUser, rangeFilterLocked]);
 
   const { filteredUsers, filteredPubLogs } = useMemo(() => {
     if (!selectedPubId || selectedPubId === "global" || selectedPubId === "all") {
@@ -1012,7 +1042,7 @@ export default function Statistics({
               ] as const).map((filter) => (
                 <button
                   key={filter.id}
-                  onClick={() => setRangeFilter(filter.id)}
+                  onClick={() => selectRangeFilter(filter.id)}
                   className={`flex-1 text-[10px] font-bold py-1.5 px-2 rounded capitalize transition-all cursor-pointer whitespace-nowrap ${
                     rangeFilter === filter.id
                       ? "bg-white text-slate-800 shadow-sm"
