@@ -797,7 +797,7 @@ export default function PubHub({
       },
       {
         id: "nocturnal",
-        title: "Night Owl 🦉",
+        title: "Goblin Mode 👺",
         tagline: "Prefers pub light to daylight",
         winner: [...memberStats].filter((m) => m.lateNightCount > 0).sort((a, b) => b.lateNightCount - a.lateNightCount)[0],
         getStatText: (w: typeof memberStats[0]) => `${w.lateNightCount} check-ins past 11 PM. Night shift, pub edition.`,
