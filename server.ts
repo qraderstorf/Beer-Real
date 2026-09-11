@@ -2317,6 +2317,133 @@ app.get("/api/users/:username/stats", async (req, res) => {
   }
 });
 
+// GET Weekly Recap - a fun, on-demand summary of the user's last 7 days. Deliberately
+// does NOT lead with volume: favorite beer and highest-rated pint come first, the raw
+// post count is secondary, and a quiet/dry week gets just as positive a framing as a
+// busy one (no week-over-week comparisons, no "you drank more" language anywhere).
+app.get("/api/users/:username/weekly-recap", async (req, res) => {
+  const { username } = req.params;
+  try {
+    const allBeersList = await getAllBeers();
+    const allUsersList = await getAllUsers();
+    const allPubsList = await getAllPubs();
+    const user = allUsersList.find((u) => u.username.toLowerCase() === username.toLowerCase());
+
+    const now = Date.now();
+    const weekMs = 7 * 24 * 60 * 60 * 1000;
+    const myLogsThisWeek = allBeersList.filter(
+      (l) =>
+        l.user.toLowerCase() === username.toLowerCase() &&
+        !isImposterLog(l) &&
+        now - new Date(l.date).getTime() <= weekMs &&
+        new Date(l.date).getTime() <= now
+    );
+
+    const postsThisWeek = myLogsThisWeek.length;
+
+    // Top beer this week
+    const beerCounts: Record<string, number> = {};
+    myLogsThisWeek.forEach((l) => {
+      const name = (l.beerName || "").trim();
+      if (name) beerCounts[name] = (beerCounts[name] || 0) + 1;
+    });
+    let topBeer: { name: string; count: number } | null = null;
+    Object.entries(beerCounts).forEach(([name, count]) => {
+      if (!topBeer || count > topBeer.count) topBeer = { name, count };
+    });
+
+    // Top pub this week
+    const pubCounts: Record<string, number> = {};
+    myLogsThisWeek.forEach((l) => {
+      if (l.pubId) pubCounts[l.pubId] = (pubCounts[l.pubId] || 0) + 1;
+    });
+    let topPub: { name: string; count: number } | null = null;
+    Object.entries(pubCounts).forEach(([pubId, count]) => {
+      if (!topPub || count > topPub.count) {
+        const pub = allPubsList.find((p) => p.id === pubId);
+        topPub = { name: pub?.name || "Unknown Pub", count };
+      }
+    });
+    const distinctPubsCount = Object.keys(pubCounts).length;
+
+    // Highest-rated pint this week
+    const rated = myLogsThisWeek.filter((l) => l.rating > 0);
+    const highestRated = rated.length
+      ? rated.reduce((best, l) => (l.rating > best.rating ? l : best))
+      : null;
+    const avgRating = rated.length
+      ? (rated.reduce((acc, l) => acc + l.rating, 0) / rated.length).toFixed(1)
+      : null;
+
+    const cheersReceived = myLogsThisWeek.reduce((acc, l) => acc + (l.cheers?.length || 0), 0);
+    const firstPourCount = myLogsThisWeek.filter((l) => l.isFirstOfDay).length;
+    const newStyleCount = myLogsThisWeek.filter((l) => l.isNewStyle).length;
+    const goblinModeCount = myLogsThisWeek.filter((l) => {
+      const hour = getLocalHour(l.date, l.timezone || "America/Los_Angeles");
+      return hour >= 0 && hour < 5;
+    }).length;
+    const dartComboCount = myLogsThisWeek.filter((l) => l.hadCig).length;
+    const totalBadges = firstPourCount + newStyleCount + goblinModeCount + dartComboCount;
+
+    const currentDryStreak = user?.stats?.currentDryStreak || 0;
+    const longestDryStreak = user?.stats?.longestDryStreak || 0;
+
+    // Week Archetype - a fun, single-line personality read on the week, picked by
+    // priority (most specific/notable pattern wins). None of these reward volume for
+    // its own sake - "The Regular" is about showing up, not drinking the most.
+    let archetype: { emoji: string; title: string; tagline: string };
+    if (postsThisWeek === 0) {
+      archetype = currentDryStreak >= 3
+        ? { emoji: "🧘", title: "The Monk", tagline: "Not a drop this week. Just vibes and hydration." }
+        : { emoji: "😌", title: "Taking It Easy", tagline: "A quiet week. No pints, no drama - sometimes that's the whole vibe." };
+    } else if (newStyleCount >= 2) {
+      archetype = { emoji: "🧭", title: "The Explorer", tagline: "Never the same pint twice. You tried something new every time you sat down." };
+    } else if (goblinModeCount >= 2) {
+      archetype = { emoji: "👺", title: "The Goblin", tagline: "The sun went down and so did your bedtime standards. Feral after midnight." };
+    } else if (cheersReceived >= 5 && cheersReceived >= postsThisWeek * 2) {
+      archetype = { emoji: "🦋", title: "The Crowd Favorite", tagline: "Every pint you posted got the crowd going. Basically a hype machine." };
+    } else if (avgRating && Number(avgRating) >= 4.5 && postsThisWeek >= 2) {
+      archetype = { emoji: "🍷", title: "The Connoisseur", tagline: "Nothing but 5-star pours this week. Discerning palate, zero regrets." };
+    } else if (firstPourCount >= 2) {
+      archetype = { emoji: "🌅", title: "The Early Bird", tagline: "First to check in, every time. The early pint gets the worm." };
+    } else if (distinctPubsCount >= 2) {
+      archetype = { emoji: "🗺️", title: "The Wanderer", tagline: "You made the rounds this week. No single pub could hold you." };
+    } else if (postsThisWeek >= 5) {
+      archetype = { emoji: "🍻", title: "The Regular", tagline: "You showed up, again and again. Your friends know exactly where to find you." };
+    } else {
+      archetype = { emoji: "🍺", title: "The Casual Sipper", tagline: "A balanced week. Nothing wild, nothing dry - just pints, at a reasonable pace." };
+    }
+
+    res.json({
+      windowDays: 7,
+      postsThisWeek,
+      topBeer,
+      topPub,
+      avgRating,
+      highestRated: highestRated
+        ? {
+            beerName: highestRated.beerName,
+            rating: highestRated.rating,
+            imageUrl: highestRated.imageUrl,
+            date: highestRated.date,
+          }
+        : null,
+      cheersReceived,
+      firstPourCount,
+      newStyleCount,
+      goblinModeCount,
+      dartComboCount,
+      totalBadges,
+      currentDryStreak,
+      longestDryStreak,
+      archetype,
+    });
+  } catch (err: any) {
+    console.error(`Failed to build weekly recap for ${username}:`, err);
+    res.status(500).json({ error: "Failed to build weekly recap" });
+  }
+});
+
 // POST Register FCM Token
 app.post("/api/register-fcm-token", async (req, res) => {
   const { token, user } = req.body;

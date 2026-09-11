@@ -5,6 +5,7 @@ import { UserProfile, BeerLog, ContentReport, isSeymoreBeers } from "../types";
 import { getMostDrankBeerForUser, compressImage } from "../utils";
 import UserAvatar from "./UserAvatar";
 import FriendsHub from "./FriendsHub";
+import WeeklyRecap from "./WeeklyRecap";
 
 interface UserProfileManagerProps {
   users: UserProfile[];
@@ -91,6 +92,8 @@ export default function UserProfileManager({
   onViewProfileRequested,
   onBackToMyProfile
 }: UserProfileManagerProps) {
+  const [showWeeklyRecap, setShowWeeklyRecap] = useState(false);
+
   // My Profile Edit States
   const [myRealName, setMyRealName] = useState("");
   const [myEmail, setMyEmail] = useState("");
@@ -664,6 +667,17 @@ export default function UserProfileManager({
                   )}
                 </div>
               )}
+
+              {/* Weekly Recap trigger */}
+              <button
+                onClick={() => setShowWeeklyRecap(true)}
+                className="w-full flex items-center justify-between gap-2 px-4 py-3 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-slate-950 rounded-2xl shadow-md transition-all cursor-pointer"
+              >
+                <span className="text-sm font-black flex items-center gap-2">
+                  🎉 {isViewOnly ? `${targetUser.realName || targetUser.username}'s Week` : "Your Week"}
+                </span>
+                <span className="text-[10px] font-bold uppercase tracking-wider opacity-70">See Recap →</span>
+              </button>
 
               {/* Stats Section */}
               <div className="space-y-2.5">
@@ -1350,6 +1364,14 @@ export default function UserProfileManager({
           </div>
         )}
       </AnimatePresence>
+
+      {showWeeklyRecap && (
+        <WeeklyRecap
+          username={displayedUsername}
+          isOwnRecap={!isViewOnly}
+          onClose={() => setShowWeeklyRecap(false)}
+        />
+      )}
     </div>
   );
 }
