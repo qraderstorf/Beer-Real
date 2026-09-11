@@ -361,12 +361,39 @@ export default function Statistics({
   // not scoped to the date-range filter, since a streak is a running record
   // rather than something that resets each week/month). Pulled straight from
   // each profile's cached stats rather than recomputed from logs here.
+  //
+  // Excludes accounts that have gone quiet: without this, a friend's abandoned
+  // account just accumulates dry-streak days forever and permanently dominates
+  // the board. "Active" here means the app was opened within the last 14 days
+  // (lastActiveDate, a lightweight heartbeat pinged on load) OR they posted
+  // within 14 days OR they joined within 14 days - whichever signal is freshest.
+  // The moment someone reopens the app, the next ping puts them right back on
+  // the board - there's no separate "welcome back" step, it just self-corrects.
+  const TEMPLE_INACTIVITY_DAYS = 14;
   const templeLeaderboardData = useMemo(() => {
+    const cutoff = Date.now() - TEMPLE_INACTIVITY_DAYS * 24 * 60 * 60 * 1000;
+
+    const lastPostByUser: Record<string, number> = {};
+    (logs || []).forEach((l) => {
+      const t = new Date(l.date).getTime();
+      if (!Number.isFinite(t)) return;
+      const key = l.user.toLowerCase();
+      if (!lastPostByUser[key] || t > lastPostByUser[key]) lastPostByUser[key] = t;
+    });
+
     return filteredUsers
+      .filter((u) => (u.stats?.longestDryStreak || 0) > 0)
+      .filter((u) => {
+        const key = u.username.toLowerCase();
+        const lastActive = u.lastActiveDate ? new Date(u.lastActiveDate).getTime() : 0;
+        const lastPost = lastPostByUser[key] || 0;
+        const joined = u.joinedDate ? new Date(u.joinedDate).getTime() : 0;
+        const mostRecentSignal = Math.max(lastActive, lastPost, joined);
+        return mostRecentSignal >= cutoff;
+      })
       .map((u) => ({ username: u.username, longestDryStreak: u.stats?.longestDryStreak || 0 }))
-      .filter((u) => u.longestDryStreak > 0)
       .sort((a, b) => b.longestDryStreak - a.longestDryStreak);
-  }, [filteredUsers]);
+  }, [filteredUsers, logs]);
 
   const [tableSearch, setTableSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("date");

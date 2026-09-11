@@ -133,6 +133,15 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return localStorage.getItem("beer_logger_authenticated") === "true";
   });
+
+  // Lightweight "app was opened" heartbeat, once per session - lets the dry-streak
+  // leaderboard tell apart accounts that are still around from ones that were only
+  // ever set up once and abandoned, without requiring a fresh beer post to count.
+  useEffect(() => {
+    if (!isAuthenticated || !currentUser) return;
+    fetch(`/api/users/${encodeURIComponent(currentUser)}/ping`, { method: "POST" }).catch(() => {});
+  }, [isAuthenticated, currentUser]);
+
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [viewingProfileUsername, setViewingProfileUsername] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);

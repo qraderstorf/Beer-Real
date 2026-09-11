@@ -39,6 +39,7 @@ export interface UserProfile {
   friends?: string[]; // mutual friend usernames
   friendRequests?: string[]; // incoming pending friend request usernames
   blockedUsers?: string[]; // usernames this profile has blocked
+  lastActiveDate?: string; // ISO timestamp of the last time the app was opened while logged in
   stats?: {
     totalPints: number;
     avgRating: string;

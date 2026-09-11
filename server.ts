@@ -3353,6 +3353,28 @@ app.post("/api/friends/remove", async (req, res) => {
   res.json({ status: "removed", users: stripPasswords(friendProfile ? [userProfile, friendProfile] : [userProfile]) });
 });
 
+// POST Ping - a lightweight "the app was just opened" heartbeat, used to distinguish
+// genuinely inactive accounts from active ones on the dry-streak leaderboard (see
+// Statistics.tsx TEMPLE_INACTIVITY_DAYS) without requiring a fresh beer post. Cheap,
+// low-stakes, fire-and-forget - deliberately no auth beyond the username existing.
+app.post("/api/users/:username/ping", async (req, res) => {
+  const { username } = req.params;
+  try {
+    const allUsers = await getAllUsers();
+    const userProfile = allUsers.find((u) => u.username.toLowerCase() === username.toLowerCase());
+    if (!userProfile) {
+      res.status(404).json({ error: "User not found." });
+      return;
+    }
+    userProfile.lastActiveDate = new Date().toISOString();
+    await saveUser(userProfile);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(`Failed to record ping for ${username}:`, err);
+    res.status(500).json({ error: "Failed to record activity." });
+  }
+});
+
 // POST Block User - hides the target's content from the blocker and severs any friendship
 app.post("/api/users/:username/block", async (req, res) => {
   const { username } = req.params;
