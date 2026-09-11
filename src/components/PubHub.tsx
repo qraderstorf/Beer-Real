@@ -2193,7 +2193,7 @@ export default function PubHub({
               </div>
 
               {/* Modal Content */}
-              <div className="overflow-y-auto p-5 space-y-4 custom-scrollbar flex-1">
+              <div className="overflow-y-auto p-5 space-y-4 custom-scrollbar flex-1 min-h-0">
                 <form onSubmit={handleCreatePub} className="space-y-4">
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
@@ -2336,7 +2336,7 @@ export default function PubHub({
                 </button>
               </div>
 
-              <div className="overflow-y-auto px-5 py-4 space-y-5">
+              <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-5">
                 {/* Active widgets */}
                 <div>
                   <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 mb-2">
