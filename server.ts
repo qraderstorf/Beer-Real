@@ -3779,7 +3779,7 @@ app.post("/api/pubs/:id/invite", async (req, res) => {
 
 // POST Leave Pub
 // POST Update a Pub's customizable Awards-tab widgets (any member can customize)
-const VALID_WIDGET_TYPES: PubWidgetType[] = ["beverage-gauge", "abv-gauge", "rating-gauge"];
+const VALID_WIDGET_TYPES: PubWidgetType[] = ["beverage-gauge", "abv-gauge", "rating-gauge", "goblin-mode", "dart-matrix"];
 app.post("/api/pubs/:id/widgets", async (req, res) => {
   const { id } = req.params;
   const currentUser = (req.body.currentUser || "").toString().trim();

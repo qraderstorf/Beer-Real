@@ -73,7 +73,7 @@ export interface AppNotification {
   type?: 'post' | 'comment' | 'cheer' | 'reaction' | 'bender' | 'first_pour' | 'invite' | 'tag' | 'imposter' | 'beacon' | 'chat' | 'friend_request' | 'friend_accept';
 }
 
-export type PubWidgetType = "beverage-gauge" | "abv-gauge" | "rating-gauge";
+export type PubWidgetType = "beverage-gauge" | "abv-gauge" | "rating-gauge" | "goblin-mode" | "dart-matrix";
 
 export interface PubWidgetConfig {
   id: string;

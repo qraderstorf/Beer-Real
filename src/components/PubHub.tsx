@@ -5,7 +5,7 @@ import {
   Sparkles, Edit2, Image, Smile, Send, UserPlus, X, 
   Trophy, Award, Zap, Moon, Coffee, Crown, ArrowLeft, TrendingUp, 
   Beer, Star, Calendar, ChevronRight, ChevronDown, Pin, Filter, BarChart3, LineChart as LineChartIcon,
-  MessageSquare, Flame, Settings2, Gauge
+  MessageSquare, Flame, Settings2, Gauge, Target
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -683,6 +683,8 @@ export default function PubHub({
     { type: "beverage-gauge", name: "Beverage Gauge", blurb: "% of pints matching a beer or style you pick", icon: Beer },
     { type: "abv-gauge", name: "ABV-O-Meter", blurb: "Average booze strength of pints logged here", icon: Gauge },
     { type: "rating-gauge", name: "Rating-O-Meter", blurb: "Average star rating of pints logged here", icon: Star },
+    { type: "goblin-mode", name: "Goblin Clock", blurb: "24hr radial clock of check-in times, glowing after midnight", icon: Moon },
+    { type: "dart-matrix", name: "Dart Matrix", blurb: "8-week heatmap of Dart Combo 🎯 activity", icon: Target },
   ];
 
   const activeWidgets: PubWidgetConfig[] = activePub?.widgets ?? DEFAULT_PUB_WIDGETS;
@@ -691,7 +693,73 @@ export default function PubHub({
     const pubName = activePub?.name || "this Pub";
     if (widget.type === "beverage-gauge") return `"${widget.keyword}" vs other pints logged in ${pubName}`;
     if (widget.type === "abv-gauge") return `Average ABV of pints logged in ${pubName}`;
-    return `Average star rating of pints logged in ${pubName}`;
+    if (widget.type === "rating-gauge") return `Average star rating of pints logged in ${pubName}`;
+    if (widget.type === "goblin-mode") return `When pints get logged around the clock in ${pubName}`;
+    return `Dart Combo 🎯 activity over the last 8 weeks in ${pubName}`;
+  };
+
+  // Local-hour helper (mirrors server-side getLocalHour) for client-side chart bucketing
+  const getLocalHourClient = (isoString: string, timezone?: string): number => {
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return 0;
+    if (!timezone) return d.getHours();
+    try {
+      const hourPart = new Intl.DateTimeFormat("en-US", { timeZone: timezone, hour: "numeric", hour12: false })
+        .formatToParts(d).find((p) => p.type === "hour")?.value;
+      return hourPart ? parseInt(hourPart, 10) % 24 : d.getHours();
+    } catch {
+      return d.getHours();
+    }
+  };
+
+  const computeGoblinClockData = () => {
+    const logs = activePubFilteredLogs;
+    const hourCounts = new Array(24).fill(0);
+    logs.forEach((l) => {
+      hourCounts[getLocalHourClient(l.date, l.timezone)]++;
+    });
+    const total = logs.length;
+    const goblinCount = hourCounts.slice(0, 5).reduce((s, c) => s + c, 0); // 12AM-4:59AM
+    const goblinPercent = total > 0 ? Math.round((goblinCount / total) * 100) : 0;
+    const maxCount = Math.max(1, ...hourCounts);
+    const ratingText =
+      goblinPercent < 10 ? "😇 Mostly responsible o'clock. Rare late-night mischief." :
+      goblinPercent < 30 ? "🌙 Some goblin tendencies creeping in after dark." :
+      "👺 Full goblin infestation. The witching hours are thriving.";
+    return { hourCounts, total, goblinCount, goblinPercent, maxCount, ratingText };
+  };
+
+  const computeDartMatrixData = () => {
+    const logs = activePubFilteredLogs;
+    const numWeeks = 8;
+    const totalDays = numWeeks * 7;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dayBuckets: { date: Date; count: number }[] = [];
+    for (let i = totalDays - 1; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      dayBuckets.push({ date: d, count: 0 });
+    }
+    logs.forEach((l) => {
+      if (!l.hadCig) return;
+      const d = new Date(l.date);
+      d.setHours(0, 0, 0, 0);
+      const bucket = dayBuckets.find((b) => b.date.getTime() === d.getTime());
+      if (bucket) bucket.count++;
+    });
+    const totalDarts = logs.filter((l) => l.hadCig).length;
+    const total = logs.length;
+    const dartPercent = total > 0 ? Math.round((totalDarts / total) * 100) : 0;
+    const maxCount = Math.max(1, ...dayBuckets.map((b) => b.count));
+    const weeks: { date: Date; count: number }[][] = [];
+    for (let w = 0; w < numWeeks; w++) weeks.push(dayBuckets.slice(w * 7, w * 7 + 7));
+    const ratingText =
+      totalDarts === 0 ? "😇 Clean lungs, clean pours. No darts logged." :
+      dartPercent < 15 ? "🚬 The occasional cheeky dart with a pint." :
+      dartPercent < 35 ? "🎯 Dart Combo is a lifestyle around here." :
+      "🔥 Practically a smoking section with a bar attached.";
+    return { weeks, totalDarts, total, dartPercent, maxCount, ratingText };
   };
 
   const computeWidgetData = (widget: PubWidgetConfig) => {
@@ -1815,6 +1883,148 @@ export default function PubHub({
       {activeTab === "awards" && (
         <div className="space-y-3">
           {activeWidgets.map((widget) => {
+            const catalogEntry = WIDGET_CATALOG.find((c) => c.type === widget.type);
+            const HeaderIcon = catalogEntry?.icon || Beer;
+            const cardHeader = (
+              <div className="border-b border-slate-100 dark:border-slate-800 pb-3 flex justify-between items-center">
+                <div>
+                  <h3 className="text-xs sm:text-sm font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                    <HeaderIcon className="w-4 h-4 text-amber-500" />
+                    {widget.label}
+                  </h3>
+                  <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5">{widgetSubtitle(widget)}</p>
+                </div>
+              </div>
+            );
+
+            // ---- Goblin Clock: 24hr radial spoke chart ----
+            if (widget.type === "goblin-mode") {
+              const gd = computeGoblinClockData();
+              const cx = 100, cy = 100, rInner = 32, rOuterMax = 88;
+              return (
+                <div key={widget.id} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs p-4 sm:p-5 space-y-4">
+                  {cardHeader}
+                  <div className="flex flex-col items-center justify-center py-2">
+                    {gd.total === 0 ? (
+                      <div className="w-full h-40 flex items-center justify-center text-slate-400 italic text-xs">No logs within filtered period</div>
+                    ) : (
+                      <div className="w-full flex flex-col items-center">
+                        <div className="w-full max-w-[220px] aspect-square relative flex items-center justify-center">
+                          <svg className="w-full h-full overflow-visible" viewBox="0 0 200 200">
+                            <circle cx={cx} cy={cy} r={rInner} fill="none" stroke="currentColor" className="text-slate-200 dark:text-slate-700" strokeWidth="1" />
+                            <circle cx={cx} cy={cy} r={rOuterMax} fill="none" stroke="currentColor" className="text-slate-100 dark:text-slate-800" strokeWidth="1" strokeDasharray="1 4" />
+                            {gd.hourCounts.map((count, h) => {
+                              const angle = (h / 24) * 360 - 90; // hour 0 at top, clockwise
+                              const rad = (angle * Math.PI) / 180;
+                              const len = rInner + (count / gd.maxCount) * (rOuterMax - rInner);
+                              const x1 = cx + rInner * Math.cos(rad);
+                              const y1 = cy + rInner * Math.sin(rad);
+                              const x2 = cx + len * Math.cos(rad);
+                              const y2 = cy + len * Math.sin(rad);
+                              const isGoblinHour = h < 5;
+                              return (
+                                <line
+                                  key={h}
+                                  x1={x1} y1={y1} x2={x2} y2={y2}
+                                  stroke={isGoblinHour ? "#a855f7" : "#f59e0b"}
+                                  strokeWidth={count > 0 ? 4 : 1.5}
+                                  strokeLinecap="round"
+                                  opacity={count > 0 ? (isGoblinHour ? 0.95 : 0.8) : 0.25}
+                                />
+                              );
+                            })}
+                            <text x={cx} y={cy - 4} textAnchor="middle" className="text-[22px] font-black font-mono fill-violet-500">{gd.goblinPercent}%</text>
+                            <text x={cx} y={cy + 12} textAnchor="middle" className="text-[8px] font-extrabold uppercase tracking-widest fill-slate-400">Goblin</text>
+                            <text x={cx} y="14" textAnchor="middle" className="text-[8px] font-extrabold fill-slate-400 uppercase">12am</text>
+                            <text x={cx} y="193" textAnchor="middle" className="text-[8px] font-extrabold fill-slate-400 uppercase">12pm</text>
+                          </svg>
+                        </div>
+
+                        <div className="w-full max-w-sm mt-2 p-3 rounded-xl border bg-violet-500/5 border-violet-500/20 text-center shadow-xs">
+                          <p className="text-xs font-bold text-slate-700 dark:text-slate-300 leading-relaxed">{gd.ratingText}</p>
+                        </div>
+
+                        <div className="w-full mt-3 flex flex-col gap-2 max-w-sm mx-auto">
+                          <div className="flex items-center justify-between p-2.5 rounded-xl bg-violet-500/5 dark:bg-violet-500/10 border border-violet-500/20 shadow-2xs">
+                            <div className="flex items-center gap-2.5">
+                              <span className="w-3.5 h-3.5 rounded-md shrink-0 bg-violet-500" />
+                              <span className="font-extrabold text-xs text-slate-800 dark:text-slate-200">Goblin Hours (12–5AM)</span>
+                            </div>
+                            <span className="font-mono text-xs font-black text-violet-600 dark:text-violet-400">{gd.goblinCount} ({gd.goblinPercent}%)</span>
+                          </div>
+                          <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 shadow-2xs">
+                            <div className="flex items-center gap-2.5">
+                              <span className="w-3.5 h-3.5 rounded-md shrink-0 bg-amber-500" />
+                              <span className="font-extrabold text-xs text-slate-600 dark:text-slate-400">Daylight Hours</span>
+                            </div>
+                            <span className="font-mono text-xs font-bold text-slate-500 dark:text-slate-400">{gd.total - gd.goblinCount} ({100 - gd.goblinPercent}%)</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+
+            // ---- Dart Matrix: 8-week contribution-style heatmap ----
+            if (widget.type === "dart-matrix") {
+              const dd = computeDartMatrixData();
+              const intensityClass = (count: number) => {
+                if (count === 0) return "bg-slate-100 dark:bg-slate-800";
+                const ratio = count / dd.maxCount;
+                if (ratio > 0.75) return "bg-amber-600";
+                if (ratio > 0.5) return "bg-amber-500";
+                if (ratio > 0.25) return "bg-amber-400/80";
+                return "bg-amber-300/60";
+              };
+              return (
+                <div key={widget.id} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs p-4 sm:p-5 space-y-4">
+                  {cardHeader}
+                  <div className="flex flex-col items-center justify-center py-2">
+                    {dd.total === 0 ? (
+                      <div className="w-full h-40 flex items-center justify-center text-slate-400 italic text-xs">No logs within filtered period</div>
+                    ) : (
+                      <div className="w-full flex flex-col items-center">
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-2xl font-black font-mono text-amber-600 dark:text-amber-400">{dd.dartPercent}%</span>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">of pints were Dart Combos 🎯</span>
+                        </div>
+
+                        <div className="flex gap-1 justify-center mt-4 overflow-x-auto max-w-full px-1">
+                          {dd.weeks.map((week, wi) => (
+                            <div key={wi} className="flex flex-col gap-1">
+                              {week.map((day, di) => (
+                                <div
+                                  key={di}
+                                  title={`${day.date.toDateString()}: ${day.count} Dart Combo${day.count === 1 ? "" : "s"}`}
+                                  className={`w-3.5 h-3.5 rounded-sm ${intensityClass(day.count)}`}
+                                />
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-2">
+                          <span className="text-[9px] font-bold text-slate-400">Less</span>
+                          <span className="w-2.5 h-2.5 rounded-sm bg-slate-100 dark:bg-slate-800" />
+                          <span className="w-2.5 h-2.5 rounded-sm bg-amber-300/60" />
+                          <span className="w-2.5 h-2.5 rounded-sm bg-amber-400/80" />
+                          <span className="w-2.5 h-2.5 rounded-sm bg-amber-500" />
+                          <span className="w-2.5 h-2.5 rounded-sm bg-amber-600" />
+                          <span className="text-[9px] font-bold text-slate-400">More</span>
+                        </div>
+
+                        <div className="w-full max-w-sm mt-3 p-3 rounded-xl border bg-amber-500/5 border-amber-500/20 text-center shadow-xs">
+                          <p className="text-xs font-bold text-slate-700 dark:text-slate-300 leading-relaxed">{dd.ratingText}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+
+            // ---- Semicircle gauge widgets: beverage-gauge / abv-gauge / rating-gauge ----
             const data = computeWidgetData(widget);
             const angleDegrees = 180 - (data.percent / 100) * 180;
             const angleRad = (angleDegrees * Math.PI) / 180;
@@ -1830,15 +2040,7 @@ export default function PubHub({
 
             return (
               <div key={widget.id} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs p-4 sm:p-5 space-y-4">
-                <div className="border-b border-slate-100 dark:border-slate-800 pb-3 flex justify-between items-center">
-                  <div>
-                    <h3 className="text-xs sm:text-sm font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                      <Beer className="w-4 h-4 text-amber-500" />
-                      {widget.label}
-                    </h3>
-                    <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5">{widgetSubtitle(widget)}</p>
-                  </div>
-                </div>
+                {cardHeader}
 
                 <div className="flex flex-col items-center justify-center py-2">
                   {activePubFilteredLogs.length === 0 ? (
