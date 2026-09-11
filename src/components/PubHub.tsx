@@ -393,8 +393,8 @@ export default function PubHub({
   // Local selection override state
   const [localPubId, setLocalPubId] = useState<string | null>(null);
   
-  // Mobile-first active tab state: "chat" | "superlatives" | "gauge"
-  const [activeTab, setActiveTab] = useState<"chat" | "superlatives" | "gauge">("chat");
+  // Mobile-first active tab state: "chat" | "awards" (Honor Roll + Guinness Gauge merged)
+  const [activeTab, setActiveTab] = useState<"chat" | "awards">("chat");
 
   // Current week number for weekly rotating superlatives
   const currentWeekNum = useMemo(() => {
@@ -1109,7 +1109,7 @@ export default function PubHub({
           onClick={() => {
             setShowBeaconModal(true);
             setBeaconError("");
-            setBeaconInvitees(activePub.members.filter((m) => m.toLowerCase().trim() !== userLower));
+            setBeaconInvitees(rallyCandidates);
           }}
           disabled={rallySending}
           className="w-full flex items-center gap-3 px-4 py-4 bg-gradient-to-r from-amber-500 via-orange-500 to-red-600 rounded-2xl shadow-lg hover:brightness-110 active:scale-[0.99] transition-all cursor-pointer text-left"
@@ -1248,135 +1248,70 @@ export default function PubHub({
         </div>
       )}
 
-      {/* Top Pub Navigation & Toggle Header Bar */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-2.5 sm:p-3.5 shadow-2xs space-y-2.5">
-        {/* Top selector and quick tools */}
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          {/* Left: Dropdown Pub Selector + Pin */}
-          <div className="flex items-center gap-2 flex-1 min-w-[180px]">
-            <div className="relative flex-1">
-              <select
-                value={activePubId}
-                onChange={(e) => handleSelectPub(e.target.value)}
-                disabled={pubs.length === 0}
-                className="w-full pl-3 pr-8 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-extrabold text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all cursor-pointer appearance-none shadow-2xs"
-              >
-                {pubs.length === 0 ? (
-                  <option value="">No Pubs Available</option>
-                ) : (
-                  <>
-                    {myPubs.length > 0 && (
-                      <optgroup label="Joined Pubs">
-                        {myPubs.map((p) => {
-                          const isImg = p.emblem && (p.emblem.startsWith("http") || p.emblem.startsWith("/") || p.emblem.startsWith("data:"));
-                          const displayEmblem = p.emblem ? (isImg ? "🖼️" : p.emblem) : "🏠";
-                          const isPinned = pinnedPubId === p.id;
-                          return (
-                            <option key={p.id} value={p.id}>
-                              {displayEmblem} {p.name} {isPinned ? "📌 (Pinned)" : ""}
-                            </option>
-                          );
-                        })}
-                      </optgroup>
-                    )}
-                    {myInvites.length > 0 && (
-                      <optgroup label="Pub Invitations">
-                        {myInvites.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            ✉️ {p.name} (Invited)
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                    {otherPubs.length > 0 && (
-                      <optgroup label="Explore Other Pubs">
-                        {otherPubs.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            🧭 {p.name} ({p.members.length} members)
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                  </>
-                )}
-              </select>
-
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2.5 text-slate-400">
-                <ChevronDown className="w-3.5 h-3.5" />
+      {/* Pub switcher - horizontal cards instead of a dropdown, so you can actually see
+          what you're picking between instead of reading option text one at a time */}
+      <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar pb-0.5 -mx-0.5 px-0.5">
+        {myPubs.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => handleSelectPub(p.id)}
+            className={`shrink-0 w-[76px] flex flex-col items-center gap-1 p-2 rounded-2xl border-2 transition-all cursor-pointer ${
+              p.id === activePubId
+                ? "bg-amber-500/10 border-amber-500 shadow-md"
+                : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-amber-300"
+            }`}
+          >
+            <div className="relative">
+              <div className="w-9 h-9 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex items-center justify-center">
+                {renderEmblem(p.emblem, "w-5 h-5 text-base")}
               </div>
+              {pinnedPubId === p.id && (
+                <Pin className="w-3 h-3 text-amber-500 fill-amber-500 absolute -top-1 -right-1" />
+              )}
             </div>
+            <span className="text-[10px] font-extrabold text-slate-800 dark:text-slate-100 truncate w-full text-center leading-tight">
+              {p.name}
+            </span>
+          </button>
+        ))}
 
-            {onPinPub && (
-              <button
-                type="button"
-                id="pin-pub-hub-button"
-                onClick={() => onPinPub(activePubId)}
-                title={pinnedPubId === activePubId ? "Unpin this view" : "Pin as default view across app"}
-                className={`p-2 rounded-xl border transition-all shrink-0 cursor-pointer min-h-[36px] ${
-                  pinnedPubId === activePubId
-                    ? "bg-amber-500 text-slate-950 border-amber-500 font-extrabold shadow-xs"
-                    : "bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                }`}
-              >
-                <Pin className={`w-4 h-4 ${pinnedPubId === activePubId ? "fill-slate-950" : ""}`} />
-              </button>
-            )}
-          </div>
+        {myInvites.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => handleSelectPub(p.id)}
+            className={`shrink-0 w-[76px] flex flex-col items-center gap-1 p-2 rounded-2xl border-2 border-dashed transition-all cursor-pointer ${
+              p.id === activePubId
+                ? "bg-emerald-500/10 border-emerald-500 shadow-md"
+                : "bg-white dark:bg-slate-900 border-emerald-300 dark:border-emerald-800 hover:border-emerald-500"
+            }`}
+          >
+            <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 flex items-center justify-center text-sm">
+              ✉️
+            </div>
+            <span className="text-[10px] font-extrabold text-emerald-700 dark:text-emerald-400 truncate w-full text-center leading-tight">
+              {p.name}
+            </span>
+          </button>
+        ))}
 
-          {/* Right Action Tools */}
-          <div className="flex items-center gap-1.5 shrink-0">
-            <button
-              onClick={() => setShowRoster(prev => ({ ...prev, [activePubId]: !prev[activePubId] }))}
-              className="px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1 min-h-[36px]"
-            >
-              <Users className="w-3.5 h-3.5 text-amber-500" />
-              <span className="hidden xs:inline">Roster</span> ({activeMembers.length})
-            </button>
+        <button
+          type="button"
+          onClick={() => setShowCreateModal(true)}
+          className="shrink-0 w-[76px] flex flex-col items-center justify-center gap-1 p-2 rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 text-slate-400 hover:text-amber-500 hover:border-amber-400 transition-all cursor-pointer min-h-[68px]"
+        >
+          <Plus className="w-5 h-5 stroke-[3px]" />
+          <span className="text-[10px] font-extrabold">New Pub</span>
+        </button>
+      </div>
 
-            {activePub && isOwner && (
-              <>
-                <button
-                  onClick={() => setInvitingPubId(invitingPubId === activePub.id ? null : activePub.id)}
-                  className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs rounded-xl transition-all cursor-pointer flex items-center gap-1 min-h-[36px]"
-                >
-                  <UserPlus className="w-3.5 h-3.5" />
-                  <span className="hidden xs:inline">Invite</span>
-                </button>
-                <button
-                  onClick={() => startEditing(activePub)}
-                  className="p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-300 rounded-xl transition-all cursor-pointer min-h-[36px] w-[36px] flex items-center justify-center"
-                  title="Edit Pub"
-                >
-                  <Edit2 className="w-3.5 h-3.5" />
-                </button>
-              </>
-            )}
-
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-2xs transition-all cursor-pointer flex items-center gap-1 min-h-[36px]"
-            >
-              <Plus className="w-3.5 h-3.5 stroke-[3px]" />
-              <span className="hidden sm:inline">New Pub</span>
-            </button>
-
-            {activePub && !isOwner && activePub.members.includes(currentUser) && (
-              <button
-                onClick={() => handleLeavePub(activePub.id)}
-                className="p-1.5 text-red-500 hover:bg-red-500/10 rounded-xl text-xs font-bold transition-all cursor-pointer min-h-[36px]"
-                title="Leave Pub"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Header Summary Sub-bar */}
-        <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
+      {/* Active pub identity + compact actions */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 sm:p-3.5 shadow-2xs space-y-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
             <div className="p-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg shrink-0">
-              {activePub ? renderEmblem(activePub.emblem, "w-6 h-6 text-base") : <span className="shrink-0 text-base">🍻</span>}
+              {activePub ? renderEmblem(activePub.emblem, "w-7 h-7 text-lg") : <span className="shrink-0 text-lg">🍻</span>}
             </div>
             <div className="min-w-0">
               <h1 className="text-sm sm:text-base font-black text-slate-900 dark:text-white leading-tight truncate">
@@ -1389,16 +1324,89 @@ export default function PubHub({
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
-            {activePub && !activePub.members.includes(currentUser) && (
+            {activePub && !activePub.members.includes(currentUser) ? (
               <button
                 onClick={() => handleJoinPub(activePub.id)}
-                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-xs flex items-center gap-1 shrink-0"
+                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-xs flex items-center gap-1 shrink-0"
               >
                 <UserPlus className="w-3.5 h-3.5" /> Join
               </button>
+            ) : (
+              <>
+                {onPinPub && activePub && (
+                  <button
+                    type="button"
+                    id="pin-pub-hub-button"
+                    onClick={() => onPinPub(activePubId)}
+                    title={pinnedPubId === activePubId ? "Unpin this view" : "Pin as default view across app"}
+                    className={`p-1.5 rounded-xl border transition-all cursor-pointer w-[32px] h-[32px] flex items-center justify-center ${
+                      pinnedPubId === activePubId
+                        ? "bg-amber-500 text-slate-950 border-amber-500"
+                        : "bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    <Pin className={`w-3.5 h-3.5 ${pinnedPubId === activePubId ? "fill-slate-950" : ""}`} />
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowRoster(prev => ({ ...prev, [activePubId]: !prev[activePubId] }))}
+                  title="Roster"
+                  className="px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-[11px] font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1 h-[32px]"
+                >
+                  <Users className="w-3.5 h-3.5 text-amber-500" />
+                  {activeMembers.length}
+                </button>
+                {activePub && isOwner && (
+                  <>
+                    <button
+                      onClick={() => setInvitingPubId(invitingPubId === activePub.id ? null : activePub.id)}
+                      title="Invite to roster"
+                      className="p-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl transition-all cursor-pointer w-[32px] h-[32px] flex items-center justify-center"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => startEditing(activePub)}
+                      className="p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-300 rounded-xl transition-all cursor-pointer w-[32px] h-[32px] flex items-center justify-center"
+                      title="Edit Pub"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                  </>
+                )}
+                {activePub && !isOwner && activePub.members.includes(currentUser) && (
+                  <button
+                    onClick={() => handleLeavePub(activePub.id)}
+                    className="p-1.5 text-red-500 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer w-[32px] h-[32px] flex items-center justify-center"
+                    title="Leave Pub"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </>
             )}
           </div>
         </div>
+
+        {otherPubs.length > 0 && (
+          <details className="text-[11px]">
+            <summary className="text-slate-400 font-bold cursor-pointer select-none">
+              🧭 Explore {otherPubs.length} other Pub{otherPubs.length === 1 ? "" : "s"}
+            </summary>
+            <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pt-2 pb-0.5">
+              {otherPubs.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => handleSelectPub(p.id)}
+                  className="shrink-0 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-full text-slate-600 dark:text-slate-300 font-bold hover:border-amber-400 transition-all cursor-pointer"
+                >
+                  {p.name} <span className="text-slate-400">({p.members.length})</span>
+                </button>
+              ))}
+            </div>
+          </details>
+        )}
 
         {/* Expandable Roster & Invites Drawer */}
         <AnimatePresence>
@@ -1478,12 +1486,13 @@ export default function PubHub({
         </div>
       )}
 
-      {/* MOBILE-CENTERED SEGMENTED TAB SWITCHER */}
-      <div className="flex items-center gap-1.5 p-1.5 bg-slate-100 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-x-auto custom-scrollbar shadow-2xs">
+      {/* TAB SWITCHER - Honor Roll and Gauge merged into one "Awards" tab, so this
+          page's primary nav is 2 choices, not 3 competing for attention */}
+      <div className="flex items-center gap-1.5 p-1.5 bg-slate-100 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xs">
         <button
           type="button"
           onClick={() => setActiveTab("chat")}
-          className={`flex-1 min-w-[90px] py-2 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap min-h-[38px] ${
+          className={`flex-1 py-2 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap min-h-[38px] ${
             activeTab === "chat"
               ? "bg-amber-500 text-slate-950 shadow-xs"
               : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
@@ -1495,28 +1504,15 @@ export default function PubHub({
 
         <button
           type="button"
-          onClick={() => setActiveTab("superlatives")}
-          className={`flex-1 min-w-[95px] py-2 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap min-h-[38px] ${
-            activeTab === "superlatives"
+          onClick={() => setActiveTab("awards")}
+          className={`flex-1 py-2 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap min-h-[38px] ${
+            activeTab === "awards"
               ? "bg-amber-500 text-slate-950 shadow-xs"
               : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
           }`}
         >
           <Award className="w-3.5 h-3.5" />
-          <span>Honor Roll</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("gauge")}
-          className={`flex-1 min-w-[90px] py-2 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap min-h-[38px] ${
-            activeTab === "gauge"
-              ? "bg-amber-500 text-slate-950 shadow-xs"
-              : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-          }`}
-        >
-          <Beer className="w-3.5 h-3.5" />
-          <span>Gauge</span>
+          <span>Awards</span>
         </button>
       </div>
 
@@ -1551,7 +1547,7 @@ export default function PubHub({
       )}
 
       {/* 2. HONOR ROLL / SUPERLATIVES TAB */}
-      {activeTab === "superlatives" && pubSuperlatives && (
+      {activeTab === "awards" && pubSuperlatives && (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs p-4 sm:p-5 space-y-3.5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 gap-2.5">
             <div>
@@ -1668,7 +1664,7 @@ export default function PubHub({
       )}
 
       {/* 3. GUINNESS GAUGE TAB */}
-      {activeTab === "gauge" && (
+      {activeTab === "awards" && (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs p-4 sm:p-5 space-y-4">
           <div className="border-b border-slate-100 dark:border-slate-800 pb-3 flex justify-between items-center">
             <div>
