@@ -1135,8 +1135,10 @@ export default function ActivityFeed({
                               actually used get a pill, so the row stays compact instead of wrapping/scrolling. The "+"
                               button is always visible and is the one discovery point for every reaction type, used or not. */}
                           <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-                            {/* Preset Buttons - hidden entirely until at least one person has used them */}
-                            {presets.filter((react) => getReactionList(log, react.key).length > 0).map((react) => {
+                            {/* Preset Buttons - hidden until at least one person has used them, except
+                                FOMO Alert which stays visible always: otherwise nobody could ever be the
+                                first to use it since the button that starts it off would never appear. */}
+                            {presets.filter((react) => react.key === "fomo" || getReactionList(log, react.key).length > 0).map((react) => {
                               const reactorList = getReactionList(log, react.key);
                               const hasReacted = reactorList.includes(currentUser);
                               const count = reactorList.length;
