@@ -1552,6 +1552,9 @@ export default function PubHub({
               {pinnedPubId === p.id && (
                 <Pin className="w-3 h-3 text-amber-500 fill-amber-500 absolute -top-1 -right-1" />
               )}
+              <span className="absolute -bottom-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-slate-800 dark:bg-slate-700 border border-white dark:border-slate-900 text-[8px] font-black text-white flex items-center justify-center leading-none">
+                {p.members.length}
+              </span>
             </div>
             <span className="text-[10px] font-extrabold text-slate-800 dark:text-slate-100 truncate w-full text-center leading-tight">
               {p.name}

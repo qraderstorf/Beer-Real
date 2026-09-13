@@ -239,6 +239,7 @@ export default function ActivityFeed({
   hasMore
 }: ActivityFeedProps) {
   const [activeReactionTooltip, setActiveReactionTooltip] = useState<string | null>(null);
+  const [failedImageIds, setFailedImageIds] = useState<Set<string>>(new Set());
   const [activeCustomEmojiLogId, setActiveCustomEmojiLogId] = useState<string | null>(null);
   const [activeReportLogId, setActiveReportLogId] = useState<string | null>(null);
   const [reportReason, setReportReason] = useState("");
@@ -1027,7 +1028,11 @@ export default function ActivityFeed({
                          log.beerName.trim().toLowerCase() !== "unnamed pint" && 
                          log.beerName.trim().toLowerCase() !== "unnamed pint 🍺" ? (
                           <>
-                            <h3 className="font-extrabold text-slate-900 dark:text-slate-100 text-base md:text-lg leading-tight">
+                            <h3 className={`font-extrabold text-base md:text-lg leading-tight ${
+                              log.rating === 5
+                                ? "bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 bg-clip-text text-transparent"
+                                : "text-slate-900 dark:text-slate-100"
+                            }`}>
                               {log.beerName}
                             </h3>
                             <div className="flex flex-wrap items-center gap-2 mt-1.5">
@@ -1051,29 +1056,36 @@ export default function ActivityFeed({
 
                       {/* Display Stars */}
                       {log.rating > 0 ? (
-                        <div className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-0.5">
-                          {[1, 2, 3, 4, 5].map((star) => (
-                            <Star
-                              key={star}
-                              className={`w-3.5 h-3.5 ${
-                                star <= log.rating
-                                  ? "fill-amber-400 text-amber-400"
-                                  : "text-slate-200"
-                              }`}
-                            />
-                          ))}
+                        <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-0.5">
+                          <div className="flex items-center gap-0.5">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <Star
+                                key={star}
+                                className={`w-3.5 h-3.5 ${
+                                  star <= log.rating
+                                    ? "fill-amber-400 text-amber-400"
+                                    : "text-slate-200 dark:text-slate-600"
+                                }`}
+                              />
+                            ))}
+                          </div>
+                          <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 leading-none pl-0.5 border-l border-slate-200 dark:border-slate-700">
+                            {log.rating}.0
+                          </span>
                         </div>
                       ) : null}
                     </div>
 
-                    {/* Logged Photo */}
-                    {log.imageUrl && (
-                      <div className="relative rounded-xl overflow-hidden border border-slate-200/85 bg-slate-50 max-h-80 w-full flex items-center justify-center shadow-sm">
+                    {/* Logged Photo - falls back cleanly to a text-only card instead of a
+                        broken-image glyph if the file failed to load or was removed */}
+                    {log.imageUrl && !failedImageIds.has(log.id) && (
+                      <div className="relative rounded-xl overflow-hidden border border-slate-200/85 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 max-h-80 w-full flex items-center justify-center shadow-sm">
                         <img
                           src={log.imageUrl}
                           alt={`${log.beerName} by ${log.user}`}
                           className="object-cover max-h-80 w-full hover:scale-[1.01] transition-all duration-300"
                           referrerPolicy="no-referrer"
+                          onError={() => setFailedImageIds((prev) => new Set(prev).add(log.id))}
                         />
                       </div>
                     )}
