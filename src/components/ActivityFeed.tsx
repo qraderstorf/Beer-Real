@@ -2,8 +2,28 @@ import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Star, MessageSquare, Flame, Trash2, Heart, Search, Filter, Award, RefreshCw, Edit, Camera, Siren, Plus, Smile, Pin, X, Flag } from "lucide-react";
 import { BeerLog, UserProfile, isSeymoreBeers, Pub } from "../types";
+import { useRetryImage } from "../utils";
 import UserAvatar from "./UserAvatar";
 import MentionDropdown from "./MentionDropdown";
+
+// Retries a few times with backoff before falling back to a text-only card - see
+// useRetryImage for why a bare <img onError> isn't enough here.
+function PostPhoto({ imageUrl, alt }: { imageUrl: string; alt: string }) {
+  const { src, failed, onError, retryKey } = useRetryImage(imageUrl);
+  if (!src || failed) return null;
+  return (
+    <div className="relative rounded-xl overflow-hidden border border-slate-200/85 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 max-h-80 w-full flex items-center justify-center shadow-sm">
+      <img
+        key={retryKey}
+        src={src}
+        alt={alt}
+        className="object-cover max-h-80 w-full hover:scale-[1.01] transition-all duration-300"
+        referrerPolicy="no-referrer"
+        onError={onError}
+      />
+    </div>
+  );
+}
 
 interface ActivityFeedProps {
   logs: BeerLog[];
@@ -261,37 +281,6 @@ export default function ActivityFeed({
   hasMore
 }: ActivityFeedProps) {
   const [activeReactionTooltip, setActiveReactionTooltip] = useState<string | null>(null);
-
-  // Photo loading is retried a few times with backoff before giving up - a broken
-  // image is much more often a transient hiccup (a Cloud Run cold start, a brief
-  // network blip) than a genuinely missing file, but a bare <img onError> only gets
-  // one shot and would otherwise hide a perfectly good photo for the rest of the
-  // session just because the very first attempt happened to lose a race.
-  const MAX_IMAGE_RETRIES = 3;
-  const [imageAttempts, setImageAttempts] = useState<Record<string, number>>({});
-  const [imageFailed, setImageFailed] = useState<Set<string>>(new Set());
-  const imageRetryTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-
-  useEffect(() => {
-    return () => {
-      Object.values(imageRetryTimers.current).forEach(clearTimeout);
-    };
-  }, []);
-
-  const handleImageError = (logId: string) => {
-    setImageAttempts((prev) => {
-      const nextAttempt = (prev[logId] || 0) + 1;
-      if (nextAttempt > MAX_IMAGE_RETRIES) {
-        setImageFailed((f) => new Set(f).add(logId));
-        return prev;
-      }
-      clearTimeout(imageRetryTimers.current[logId]);
-      imageRetryTimers.current[logId] = setTimeout(() => {
-        setImageAttempts((p) => ({ ...p, [logId]: nextAttempt }));
-      }, nextAttempt * 1200);
-      return prev;
-    });
-  };
   const [activeCustomEmojiLogId, setActiveCustomEmojiLogId] = useState<string | null>(null);
   const [activeReportLogId, setActiveReportLogId] = useState<string | null>(null);
   const [reportReason, setReportReason] = useState("");
@@ -1128,21 +1117,8 @@ export default function ActivityFeed({
                       ) : null}
                     </div>
 
-                    {/* Logged Photo - retries a few times with backoff (a broken photo is
-                        usually a transient hiccup, not a genuinely missing file) before
-                        falling back cleanly to a text-only card instead of a broken-image
-                        glyph if it truly can't be loaded. */}
-                    {log.imageUrl && !imageFailed.has(log.id) && (
-                      <div className="relative rounded-xl overflow-hidden border border-slate-200/85 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 max-h-80 w-full flex items-center justify-center shadow-sm">
-                        <img
-                          key={imageAttempts[log.id] || 0}
-                          src={imageAttempts[log.id] ? `${log.imageUrl}${log.imageUrl.includes("?") ? "&" : "?"}_retry=${imageAttempts[log.id]}` : log.imageUrl}
-                          alt={`${log.beerName} by ${log.user}`}
-                          className="object-cover max-h-80 w-full hover:scale-[1.01] transition-all duration-300"
-                          referrerPolicy="no-referrer"
-                          onError={() => handleImageError(log.id)}
-                        />
-                      </div>
+                    {log.imageUrl && (
+                      <PostPhoto imageUrl={log.imageUrl} alt={`${log.beerName} by ${log.user}`} />
                     )}
 
                     {/* Reaction Bar & Preset Buttons */}

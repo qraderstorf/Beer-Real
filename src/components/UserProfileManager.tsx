@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Check, Calendar, Sparkles, X, Smile, Trash2, Trophy, Flame, Award, Shield, Heart, ZoomIn, ZoomOut, Pencil, ArrowLeft, Ban, Flag } from "lucide-react";
 import { UserProfile, BeerLog, ContentReport, isSeymoreBeers } from "../types";
-import { getMostDrankBeerForUser, compressImage } from "../utils";
+import { getMostDrankBeerForUser, compressImage, useRetryImage } from "../utils";
 import UserAvatar from "./UserAvatar";
 import FriendsHub from "./FriendsHub";
 import WeeklyRecap from "./WeeklyRecap";
@@ -102,6 +102,7 @@ export default function UserProfileManager({
   const [myCurrentPassword, setMyCurrentPassword] = useState("");
   const [myNewPassword, setMyNewPassword] = useState("");
   const [myPhotoUrl, setMyPhotoUrl] = useState<string | null>(null);
+  const myPhotoPreview = useRetryImage(myPhotoUrl);
   const [myError, setMyError] = useState<string | null>(null);
   const [mySuccess, setMySuccess] = useState(false);
   const [isUpdatingMyProfile, setIsUpdatingMyProfile] = useState(false);
@@ -1043,13 +1044,15 @@ export default function UserProfileManager({
                         onClick={() => document.getElementById("profile-photo-input")?.click()}
                         className="border-2 border-dashed border-slate-200 hover:border-amber-500 rounded-xl p-4 text-center cursor-pointer transition-all bg-white hover:bg-amber-50/10 flex flex-col items-center justify-center gap-1.5 shadow-sm"
                       >
-                        {myPhotoUrl ? (
+                        {myPhotoUrl && !myPhotoPreview.failed ? (
                           <div className="relative w-16 h-16 group">
                             <img
-                              src={myPhotoUrl}
+                              key={myPhotoPreview.retryKey}
+                              src={myPhotoPreview.src}
                               alt="Profile"
                               className="w-16 h-16 rounded-full object-cover border border-amber-500 shadow-sm"
                               referrerPolicy="no-referrer"
+                              onError={myPhotoPreview.onError}
                             />
                             <div className="absolute inset-0 bg-black/45 rounded-full opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                               <span className="text-[9px] text-white font-bold uppercase">Change</span>

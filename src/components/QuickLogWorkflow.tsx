@@ -168,22 +168,33 @@ export default function QuickLogWorkflow({
     }
   };
 
-  // Helper to ensure base64 image is uploaded to server/storage and converted to a short URL
+  // Helper to ensure base64 image is uploaded to server/storage and converted to a short URL.
+  // A hard timeout matters here specifically: without one, a flaky connection (a bar with
+  // one bar of signal is the whole use case for this app) could leave this hanging
+  // indefinitely with the UI stuck mid-post instead of falling back and letting the post
+  // go through. On any failure/timeout it falls back to the raw base64, which the server's
+  // own POST /api/beers still runs through the same hardened upload path with its own
+  // retries - this isn't a silent dead end.
   const ensureShortImageUrl = async (imageStr?: string): Promise<string | undefined> => {
     if (!imageStr) return undefined;
     if (!imageStr.startsWith("data:image/")) return imageStr;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
     try {
       const res = await fetch("/api/upload-image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ image: imageStr }),
+        signal: controller.signal,
       });
       if (res.ok) {
         const data = await res.json();
         if (data.url) return data.url;
       }
     } catch (err) {
-      console.error("[QuickLogWorkflow] Image upload error:", err);
+      console.error("[QuickLogWorkflow] Image upload error or timeout:", err);
+    } finally {
+      clearTimeout(timeoutId);
     }
     return imageStr;
   };
