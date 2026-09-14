@@ -3073,8 +3073,17 @@ app.post("/api/login", async (req, res) => {
 // GET Users
 app.get("/api/users", async (req, res) => {
   const list = await getAllUsers();
+  const viewerUsername = (req.query.viewerUsername || "").toString().trim().toLowerCase();
   // Never send password hashes to clients - nothing client-side needs to read this back.
-  res.json(list.map(({ password, ...rest }) => rest));
+  // Email is likewise stripped from this bulk listing - it's not displayed anywhere in the
+  // app, so the only legitimate reason to see one is a user loading their own profile to
+  // edit it, which is why the requesting user's own email (if identified) is kept.
+  res.json(
+    list.map(({ password, email, ...rest }) => ({
+      ...rest,
+      ...(viewerUsername && rest.username.toLowerCase() === viewerUsername ? { email } : {}),
+    }))
+  );
 });
 
 // POST User Profile
@@ -3092,6 +3101,22 @@ app.post("/api/users", async (req, res) => {
   );
 
   const existingUser = existingIndex !== -1 ? allUsersList[existingIndex] : null;
+
+  // New accounts only: usernames can't contain whitespace, since the @mention parser
+  // (both while typing and when rendering existing text) only matches [a-zA-Z0-9_-] -
+  // a username with a space would be unmentionable/mis-linked everywhere in the app.
+  if (!existingUser && /\s/.test(username)) {
+    res.status(400).json({ error: "Usernames can't contain spaces - try an underscore or just squish it together." });
+    return;
+  }
+
+  // New passwords (new account, or an existing account changing its password) need a
+  // sane minimum length - there was previously no floor at all, so a 1-character
+  // password was accepted.
+  if (password && password.length < 4) {
+    res.status(400).json({ error: "Password must be at least 4 characters." });
+    return;
+  }
 
   // Require proof of identity before touching an EXISTING account. This endpoint used
   // to silently overwrite any account's profile - including its password - given

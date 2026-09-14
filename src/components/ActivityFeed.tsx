@@ -131,31 +131,53 @@ function renderTextWithMentions(
   onViewProfileRequested?: (username: string) => void
 ) {
   if (!text) return null;
-  const parts = text.split(/(@[a-zA-Z0-9_-]+)/g);
-  return (
-    <>
-      {parts.map((part, index) => {
-        if (part.startsWith("@")) {
-          const username = part.substring(1);
-          const exists = users.some(
-            (u) => u.username.toLowerCase().trim() === username.toLowerCase().trim()
-          );
-          if (exists) {
-            return (
-              <span
-                key={index}
-                onClick={() => onViewProfileRequested?.(username)}
-                className="text-amber-600 dark:text-amber-400 font-bold hover:underline cursor-pointer underline decoration-amber-500/50 underline-offset-2"
-              >
-                {part}
-              </span>
-            );
-          }
-        }
-        return part;
-      })}
-    </>
-  );
+
+  // New usernames can't contain spaces, but legacy accounts (e.g. the admin
+  // "Seymore Beerz") still can - matching the longest known username first
+  // means those still link/highlight correctly instead of only "@Seymore".
+  const knownUsernames = [...new Set(users.map((u) => u.username))].sort((a, b) => b.length - a.length);
+
+  const nodes: React.ReactNode[] = [];
+  let cursor = 0;
+  let key = 0;
+
+  while (cursor < text.length) {
+    const atIndex = text.indexOf("@", cursor);
+    if (atIndex === -1) {
+      nodes.push(text.slice(cursor));
+      break;
+    }
+    if (atIndex > cursor) {
+      nodes.push(text.slice(cursor, atIndex));
+    }
+
+    const remainder = text.slice(atIndex + 1);
+    const matchedUsername = knownUsernames.find((name) => {
+      if (!remainder.toLowerCase().startsWith(name.toLowerCase())) return false;
+      const nextChar = remainder[name.length];
+      return !nextChar || !/[a-zA-Z0-9_-]/.test(nextChar);
+    });
+
+    if (matchedUsername) {
+      nodes.push(
+        <span
+          key={key++}
+          onClick={() => onViewProfileRequested?.(matchedUsername)}
+          className="text-amber-600 dark:text-amber-400 font-bold hover:underline cursor-pointer underline decoration-amber-500/50 underline-offset-2"
+        >
+          @{matchedUsername}
+        </span>
+      );
+      cursor = atIndex + 1 + matchedUsername.length;
+    } else {
+      // Not a recognized user - render as plain text, same as before.
+      const fallback = remainder.match(/^[a-zA-Z0-9_-]*/)?.[0] || "";
+      nodes.push(`@${fallback}`);
+      cursor = atIndex + 1 + fallback.length;
+    }
+  }
+
+  return <>{nodes}</>;
 }
 
 const POST_REPORT_REASONS = [

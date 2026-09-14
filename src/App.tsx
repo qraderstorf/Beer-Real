@@ -99,6 +99,11 @@ export default function App() {
     return localStorage.getItem("beer_logger_username") || "";
   });
 
+  // GET /api/users strips email addresses from every entry except the requesting
+  // user's own, so the bulk listing can't be scraped for everyone's email at once.
+  const usersApiUrl = () =>
+    currentUser ? `/api/users?viewerUsername=${encodeURIComponent(currentUser)}` : "/api/users";
+
   const [showFriendsOnboarding, setShowFriendsOnboarding] = useState(false);
 
   // Usernames the current user has blocked, so their posts/comments can be
@@ -502,7 +507,7 @@ export default function App() {
       const activeFirestore = forceApiFallback ? false : clientUseFirestore;
       if (activeFirestore) {
         const [usersRes, pubsRes, notifsRes] = await Promise.all([
-          fetch("/api/users"),
+          fetch(usersApiUrl()),
           fetch("/api/pubs").catch(() => null),
           fetch("/api/notifications").catch(() => null)
         ]);
@@ -554,7 +559,7 @@ export default function App() {
       } else {
         const [beersRes, usersRes, notifsRes, pubsRes] = await Promise.all([
           fetch("/api/beers?limit=10"),
-          fetch("/api/users"),
+          fetch(usersApiUrl()),
           fetch("/api/notifications").catch(() => null),
           fetch("/api/pubs").catch(() => null)
         ]);
@@ -663,7 +668,7 @@ export default function App() {
     );
 
     // Fetch users and pubs from cache-backed API endpoints
-    fetch("/api/users")
+    fetch(usersApiUrl())
       .then((res) => {
         if (!res.ok) throw new Error("Failed to fetch cached users");
         return res.json();

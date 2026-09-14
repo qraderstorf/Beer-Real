@@ -153,6 +153,10 @@ export default function LoginScreen({ users, onLoginSuccess, onProfileCreated }:
       setError("Please specify a password.");
       return;
     }
+    if (newPassword.length < 4) {
+      setError("Password must be at least 4 characters.");
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -166,15 +170,8 @@ export default function LoginScreen({ users, onLoginSuccess, onProfileCreated }:
         throw new Error("Username already taken. Please choose a different name.");
       }
 
-      // Verify if email already exists if provided
-      if (newEmail.trim()) {
-        const duplicateEmail = users.some(
-          (u) => u.email && u.email.toLowerCase() === newEmail.trim().toLowerCase()
-        );
-        if (duplicateEmail) {
-          throw new Error("This email address is already associated with another account.");
-        }
-      }
+      // Email duplicate check happens server-side - the bulk user list this client
+      // holds no longer includes other people's email addresses to check against.
 
       const res = await fetch("/api/users", {
         method: "POST",
@@ -379,11 +376,11 @@ export default function LoginScreen({ users, onLoginSuccess, onProfileCreated }:
                       maxLength={15}
                       value={newUsername}
                       onChange={(e) => {
-                        // strip spaces, allow only letters/numbers/underscores
-                        const cleanVal = e.target.value.replace(/[^a-zA-Z0-9_\-\s]/g, "");
+                        // No spaces - @mentions elsewhere only match letters/numbers/underscore/hyphen
+                        const cleanVal = e.target.value.replace(/[^a-zA-Z0-9_-]/g, "");
                         setNewUsername(cleanVal);
                       }}
-                      placeholder="e.g. Seymore Beers"
+                      placeholder="e.g. SeymoreBeers"
                       className="block w-full pl-10 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 placeholder-slate-400 transition-all"
                     />
                   </div>
@@ -526,9 +523,10 @@ export default function LoginScreen({ users, onLoginSuccess, onProfileCreated }:
                     </div>
                     <input
                       type={showPassword ? "text" : "password"}
+                      minLength={4}
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="Create a password"
+                      placeholder="Create a password (min. 4 characters)"
                       className="block w-full pl-10 pr-10 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 placeholder-slate-400 transition-all"
                     />
                     <button
