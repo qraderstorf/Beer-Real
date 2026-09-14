@@ -120,29 +120,6 @@ function getStorageInstance(): any {
   return firebaseStorage;
 }
 
-// Helper function to convert base64 data URI to a static uploaded image file (fallback)
-function saveBase64ToImageFile(base64Data: string): string {
-  if (!base64Data || typeof base64Data !== "string") return base64Data;
-  if (!base64Data.startsWith("data:image/")) {
-    return base64Data; // Already a URL or empty
-  }
-  try {
-    const matches = base64Data.match(/^data:image\/([a-zA-Z0-9-+.]+);base64,(.+)$/);
-    if (!matches || matches.length !== 3) return base64Data;
-    const ext = matches[1] === "jpeg" ? "jpg" : matches[1] || "jpg";
-    const dataBuffer = Buffer.from(matches[2], "base64");
-    const filename = `photo-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${ext}`;
-    const filePath = path.join(uploadsDir, filename);
-    fs.writeFileSync(filePath, dataBuffer);
-    const publicUrl = `/uploads/${filename}`;
-    console.log(`[Upload] Converted base64 (${base64Data.length} chars) to local file ${publicUrl}`);
-    return publicUrl;
-  } catch (err) {
-    console.error("[Upload] Failed to save base64 image to disk:", err);
-    return base64Data;
-  }
-}
-
 async function saveBase64ToStorage(base64Data: string): Promise<string> {
   if (!base64Data || typeof base64Data !== "string") return base64Data;
   if (!base64Data.startsWith("data:image/")) {
@@ -156,9 +133,7 @@ async function saveBase64ToStorage(base64Data: string): Promise<string> {
   // Prefer the Admin SDK: it writes with the server's privileged service-account
   // credentials and bypasses Firebase Storage Security Rules entirely, so uploads
   // can't be broken by a rules change the way the unauthenticated client SDK call
-  // below can (and was - this is why some images stopped uploading: the client SDK
-  // path started getting storage/unauthorized and silently falling back to saving
-  // the photo on local disk, which Cloud Run wipes on every redeploy).
+  // below can.
   //
   // Deliberately NOT using makePublic()/a public download URL here: that depends on
   // the bucket's object ACL settings, which throw outright on a bucket with Uniform
@@ -167,18 +142,27 @@ async function saveBase64ToStorage(base64Data: string): Promise<string> {
   // we serve the bytes back out ourselves via GET /api/image/:filename using these
   // same Admin SDK credentials, so viewing a photo never depends on the bucket or an
   // object being publicly readable at all.
+  //
+  // A couple of quick retries absorb the same class of transient credential/network
+  // hiccup (e.g. a cold Cloud Run instance) that GET /api/image/:filename also retries
+  // around, rather than treating one bad moment as a real failure.
   if (getAdminApps().length > 0) {
-    try {
-      const buffer = Buffer.from(matches[2], "base64");
-      const bucket = getAdminStorage().bucket();
-      const file = bucket.file(filename);
-      await file.save(buffer, { metadata: { contentType: `image/${matches[1]}` } });
-      const proxyUrl = `/api/image/${encodeURIComponent(filename.replace(/^photos\//, ""))}`;
-      console.log(`[Storage] Uploaded base64 (${base64Data.length} chars) via Admin SDK, serving via ${proxyUrl}`);
-      return proxyUrl;
-    } catch (adminErr) {
-      console.warn("[Storage] Admin SDK upload failed, trying client SDK:", adminErr);
+    const buffer = Buffer.from(matches[2], "base64");
+    let lastAdminErr: any = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const bucket = getAdminStorage().bucket();
+        const file = bucket.file(filename);
+        await file.save(buffer, { metadata: { contentType: `image/${matches[1]}` } });
+        const proxyUrl = `/api/image/${encodeURIComponent(filename.replace(/^photos\//, ""))}`;
+        console.log(`[Storage] Uploaded base64 (${base64Data.length} chars) via Admin SDK, serving via ${proxyUrl}`);
+        return proxyUrl;
+      } catch (adminErr) {
+        lastAdminErr = adminErr;
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+      }
     }
+    console.warn("[Storage] Admin SDK upload failed after retries, trying client SDK:", lastAdminErr);
   }
 
   try {
@@ -189,14 +173,19 @@ async function saveBase64ToStorage(base64Data: string): Promise<string> {
       const downloadUrl = await getDownloadURL(storageRef);
       console.log(`[Storage] Uploaded base64 (${base64Data.length} chars) to Firebase Storage: ${downloadUrl}`);
       return downloadUrl;
-    } else {
-      console.warn("[Storage] Firebase Storage unavailable, falling back to local file.");
-      return saveBase64ToImageFile(base64Data);
     }
   } catch (err) {
-    console.error("[Storage] Failed to upload image to Firebase Storage, falling back to local file:", err);
-    return saveBase64ToImageFile(base64Data);
+    console.error("[Storage] Failed to upload image to Firebase Storage:", err);
   }
+
+  // Deliberately NOT falling back to local disk here anymore: Cloud Run wipes it on
+  // every redeploy/instance recycle, so a photo saved there "succeeds" immediately
+  // and then silently vanishes later with no error anyone sees - exactly the
+  // symptom this was built to stop. If durable storage genuinely isn't reachable
+  // after retries, the check-in should still save (its other details matter more
+  // than the photo), just without a photo, rather than promising one it can't keep.
+  console.error("[Storage] All upload paths failed - saving this check-in without a photo rather than risking a photo that silently disappears later.");
+  return "";
 }
 
 // Stream an image back out of Cloud Storage using the server's own privileged Admin
@@ -204,33 +193,61 @@ async function saveBase64ToStorage(base64Data: string): Promise<string> {
 // publicly readable, on Storage Security Rules, or on signed URLs - all of which
 // have proven unreliable in this project. See saveBase64ToStorage() above.
 app.get("/api/image/:filename", async (req, res) => {
-  try {
-    if (getAdminApps().length === 0) {
-      res.status(503).end();
-      return;
-    }
-    // Only allow simple filenames (no path traversal) under the fixed photos/ prefix.
-    const safeName = path.basename(req.params.filename);
-    const bucket = getAdminStorage().bucket();
-    const file = bucket.file(`photos/${safeName}`);
-    const [exists] = await file.exists();
-    if (!exists) {
-      res.status(404).end();
-      return;
-    }
-    const [metadata] = await file.getMetadata();
-    res.setHeader("Content-Type", metadata.contentType || "image/jpeg");
-    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-    file.createReadStream()
-      .on("error", (err) => {
-        console.error(`[Storage] Failed to stream image ${safeName}:`, err);
-        if (!res.headersSent) res.status(500).end();
-      })
-      .pipe(res);
-  } catch (err) {
-    console.error(`[Storage] Failed to serve image ${req.params.filename}:`, err);
-    res.status(500).end();
+  // Error responses are never cached - a transient hiccup here should never get
+  // "remembered" as broken by a browser or CDN sitting in front of this route.
+  const fail = (status: number) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.status(status).end();
+  };
+
+  if (getAdminApps().length === 0) {
+    fail(503);
+    return;
   }
+
+  // Only allow simple filenames (no path traversal) under the fixed photos/ prefix.
+  const safeName = path.basename(req.params.filename);
+  const bucket = getAdminStorage().bucket();
+  const file = bucket.file(`photos/${safeName}`);
+
+  // A couple of quick retries absorbs the same class of transient credential/network
+  // hiccup (e.g. a cold Cloud Run instance) that the client itself now retries around -
+  // no reason to bounce a request back to the browser for something a 1-2s wait fixes.
+  let exists = false;
+  let metadata: any = null;
+  let lastErr: any = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      [exists] = await file.exists();
+      if (exists) {
+        [metadata] = await file.getMetadata();
+      }
+      lastErr = null;
+      break;
+    } catch (err) {
+      lastErr = err;
+      if (attempt < 2) await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+    }
+  }
+
+  if (lastErr) {
+    console.error(`[Storage] Failed to serve image ${safeName} after retries:`, lastErr);
+    fail(500);
+    return;
+  }
+  if (!exists) {
+    fail(404);
+    return;
+  }
+
+  res.setHeader("Content-Type", metadata.contentType || "image/jpeg");
+  res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  file.createReadStream()
+    .on("error", (err) => {
+      console.error(`[Storage] Failed to stream image ${safeName}:`, err);
+      if (!res.headersSent) fail(500);
+    })
+    .pipe(res);
 });
 
 // TEMPORARY diagnostic endpoint - visit this URL directly in any browser to see exactly
@@ -925,9 +942,15 @@ function sanitizeForFirestore<T extends Record<string, any>>(obj: T): Record<str
         clean[key] = sanitizeForFirestore(value);
       } else if (typeof value === "string") {
         let strVal = value;
-        // Auto-convert any base64 image field to a saved file URL if it slipped through
+        // Raw base64 shouldn't reach this point - it should already have gone through
+        // saveBase64ToStorage() upstream. If it somehow slipped through anyway, strip it
+        // rather than falling back to a synchronous local-disk write here: this function
+        // isn't async so it can't retry through the real Admin SDK upload path, and a
+        // "successful" local write is Cloud Run-ephemeral - it would look fine immediately
+        // and silently vanish later, which is worse than just not having a photo.
         if ((key === "imageUrl" || key === "avatar") && strVal.startsWith("data:image/")) {
-          strVal = saveBase64ToImageFile(strVal);
+          console.warn(`[Firestore Safeguard] Raw base64 reached sanitizeForFirestore for "${key}" - this should have been uploaded already. Stripping instead of writing to ephemeral local disk.`);
+          strVal = "";
         }
         // Enforce 50KB size safeguard
         if (strVal.length > MAX_FIELD_BYTES) {
