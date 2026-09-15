@@ -20,8 +20,36 @@ import {
   Legend
 } from "recharts";
 import { Pub, UserProfile, BeerLog, PubChatMessage, PubWidgetConfig } from "../types";
-import { getMostDrankBeerForUser, isImposterLog } from "../utils";
+import { getMostDrankBeerForUser, isImposterLog, useRetryImage } from "../utils";
 import UserAvatar from "./UserAvatar";
+
+function isEmblemUrl(str: string | undefined): boolean {
+  if (!str) return false;
+  return str.startsWith("http://") || str.startsWith("https://") || str.startsWith("/") || str.startsWith("data:image");
+}
+
+// A plain function called once per pub in a roster/carousel can't call useRetryImage
+// itself without breaking the Rules of Hooks (each call site needs its own hook
+// instance) - this small component is that instance.
+function PubEmblem({ emblem, sizeClass = "w-9 h-9 text-xl" }: { emblem: string | undefined; sizeClass?: string }) {
+  const isImg = isEmblemUrl(emblem);
+  const { src, failed, onError, retryKey } = useRetryImage(isImg ? emblem : undefined);
+
+  if (!emblem) return <span className="shrink-0 text-lg">🍺</span>;
+  if (!isImg) return <span className="shrink-0 text-xl align-middle">{emblem}</span>;
+  if (!src || failed) return <span className="shrink-0 text-xl align-middle">🍺</span>;
+
+  return (
+    <img
+      key={retryKey}
+      src={src}
+      alt="Pub Emblem"
+      className={`${sizeClass} rounded-xl object-cover shrink-0 align-middle shadow-sm border border-slate-200/50 dark:border-slate-800/80`}
+      referrerPolicy="no-referrer"
+      onError={onError}
+    />
+  );
+}
 
 interface PubHubProps {
   currentUser: string;
@@ -484,29 +512,6 @@ export default function PubHub({
   const isUrl = (str: string) => {
     if (!str) return false;
     return str.startsWith("http://") || str.startsWith("https://") || str.startsWith("/") || str.startsWith("data:image");
-  };
-
-  const renderEmblem = (emblem: string | undefined, sizeClass = "w-9 h-9 text-xl") => {
-    if (!emblem) return <span className="shrink-0 text-lg">🍺</span>;
-    const isImg = isUrl(emblem);
-    if (isImg) {
-      return (
-        <img
-          src={emblem}
-          alt="Pub Emblem"
-          className={`${sizeClass} rounded-xl object-cover shrink-0 align-middle shadow-sm border border-slate-200/50 dark:border-slate-800/80`}
-          referrerPolicy="no-referrer"
-          onError={(e) => {
-            e.currentTarget.style.display = "none";
-            const fallback = document.createElement("span");
-            fallback.innerText = "🍺";
-            fallback.className = "shrink-0 text-xl";
-            e.currentTarget.parentElement?.appendChild(fallback);
-          }}
-        />
-      );
-    }
-    return <span className="shrink-0 text-xl align-middle">{emblem}</span>;
   };
 
   const startEditing = (pub: Pub) => {
@@ -1547,7 +1552,7 @@ export default function PubHub({
           >
             <div className="relative">
               <div className="w-9 h-9 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex items-center justify-center">
-                {renderEmblem(p.emblem, "w-5 h-5 text-base")}
+                <PubEmblem emblem={p.emblem} sizeClass="w-5 h-5 text-base" />
               </div>
               {pinnedPubId === p.id && (
                 <Pin className="w-3 h-3 text-amber-500 fill-amber-500 absolute -top-1 -right-1" />
@@ -1597,7 +1602,7 @@ export default function PubHub({
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="p-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg shrink-0">
-              {activePub ? renderEmblem(activePub.emblem, "w-7 h-7 text-lg") : <span className="shrink-0 text-lg">🍻</span>}
+              {activePub ? <PubEmblem emblem={activePub.emblem} sizeClass="w-7 h-7 text-lg" /> : <span className="shrink-0 text-lg">🍻</span>}
             </div>
             <div className="min-w-0">
               <h1 className="text-sm sm:text-base font-black text-slate-900 dark:text-white leading-tight truncate">
