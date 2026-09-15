@@ -209,6 +209,42 @@ async function saveBase64ToStorage(base64Data: string): Promise<string> {
   return "";
 }
 
+// Resolves an imageUrl/photoUrl value saved on a post or user profile back to the
+// object path inside the Storage bucket, or null if it isn't a Storage-backed URL at
+// all (a base64 data URL that never got uploaded, an empty value, or some other
+// external URL). Handles both the current proxy format this app writes today
+// (/api/image/<filename>, an object under photos/) and the legacy Firebase Storage
+// download-URL format (https://firebasestorage.googleapis.com/.../o/<encoded-path>?...)
+// written by the client-SDK fallback path and the old Google AI Studio app.
+function storageObjectPathForImageUrl(imageUrl: string | undefined): string | null {
+  if (!imageUrl || typeof imageUrl !== "string") return null;
+  const proxyMatch = imageUrl.match(/^\/api\/image\/([^/?]+)/);
+  if (proxyMatch) {
+    return `photos/${decodeURIComponent(proxyMatch[1])}`;
+  }
+  const legacyMatch = imageUrl.match(/firebasestorage\.googleapis\.com\/v0\/b\/[^/]+\/o\/([^?]+)/);
+  if (legacyMatch) {
+    return decodeURIComponent(legacyMatch[1]);
+  }
+  return null;
+}
+
+// Deletes the Storage object backing a post/profile photo, if any. Best-effort only -
+// a failure here (object already gone, transient credential hiccup, etc.) is logged
+// and swallowed rather than thrown, since losing a few cents of orphaned Storage is
+// far preferable to blocking someone from deleting their own post or account over it.
+async function deleteStorageObjectForImageUrl(imageUrl: string | undefined): Promise<void> {
+  const objectPath = storageObjectPathForImageUrl(imageUrl);
+  if (!objectPath) return;
+  if (getAdminApps().length === 0) return;
+  try {
+    await getAdminStorage().bucket().file(objectPath).delete({ ignoreNotFound: true });
+    console.log(`[Storage] Deleted ${objectPath}`);
+  } catch (err) {
+    console.warn(`[Storage] Failed to delete ${objectPath} (leaving it orphaned):`, err);
+  }
+}
+
 // Stream an image back out of Cloud Storage using the server's own privileged Admin
 // SDK credentials, so viewing a photo never depends on the bucket/object being
 // publicly readable, on Storage Security Rules, or on signed URLs - all of which
@@ -1322,6 +1358,7 @@ async function deleteUser(username: string): Promise<boolean> {
       // blockedUsers lists first, so no other profile is left pointing at a
       // deleted account.
       const allUsers = await getAllUsers();
+      const departingUser = allUsers.find((u) => u.username.toLowerCase() === usernameKey);
       for (const other of allUsers) {
         if (other.username.toLowerCase() === usernameKey) continue;
         const hadFriend = (other.friends || []).some((f) => f.toLowerCase() === usernameKey);
@@ -1343,10 +1380,23 @@ async function deleteUser(username: string): Promise<boolean> {
       const q = query(beersColl, where("user", "==", username));
       const snap = await getDocs(q);
       const batch = writeBatch(firestore);
+      const orphanedImageUrls: string[] = [];
       snap.forEach((docSnap) => {
         batch.delete(docSnap.ref);
+        const beerData = docSnap.data() as BeerLog;
+        if (beerData.imageUrl) orphanedImageUrls.push(beerData.imageUrl);
       });
       await batch.commit();
+
+      // Best-effort Storage cleanup for the profile photo and every deleted post's
+      // photo - fired after the Firestore deletes succeed, never blocking or failing
+      // the account deletion itself if a Storage object is already gone or briefly
+      // unreachable.
+      if (departingUser?.photoUrl) orphanedImageUrls.push(departingUser.photoUrl);
+      Promise.all(orphanedImageUrls.map((url) => deleteStorageObjectForImageUrl(url))).catch((e) =>
+        console.warn("Error cleaning up Storage objects after user delete:", e)
+      );
+
       return true;
     } catch (err) {
       handleFirestoreError(err, "delete user");
@@ -2927,6 +2977,12 @@ app.delete("/api/beers/:id", async (req, res) => {
   const beerUserToUpdate = log?.user;
 
   await deleteBeerLog(id);
+
+  if (log?.imageUrl) {
+    deleteStorageObjectForImageUrl(log.imageUrl).catch((e) =>
+      console.warn("Error deleting Storage object after post delete:", e)
+    );
+  }
 
   if (beerUserToUpdate) {
     // Recalculate user statistics asynchronously
