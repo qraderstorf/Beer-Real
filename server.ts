@@ -53,6 +53,27 @@ function verifyPassword(plain: string, stored: string): boolean {
   return stored === plain;
 }
 
+// Generates a human-typeable recovery code (e.g. "7F3K-QP9X-2MNR") for self-service
+// password reset. There's no email-sending infra in this app, so this is the account
+// recovery mechanism: shown to the user exactly once (at signup, or on regeneration),
+// hashed at rest with the same scrypt helper used for passwords, never stored in plaintext.
+const RECOVERY_CODE_CHARS = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"; // no 0/O/1/I - avoids ambiguity when handwritten/read aloud
+function generateRecoveryCode(): string {
+  const groups: string[] = [];
+  for (let g = 0; g < 3; g++) {
+    let group = "";
+    for (let i = 0; i < 4; i++) {
+      group += RECOVERY_CODE_CHARS[crypto.randomInt(RECOVERY_CODE_CHARS.length)];
+    }
+    groups.push(group);
+  }
+  return groups.join("-");
+}
+
+function normalizeRecoveryCode(code: string): string {
+  return (code || "").toString().trim().toUpperCase();
+}
+
 // Sanity bounds so a joke/typo'd value (e.g. "5000" instead of "5.0") can't submit
 // and silently skew ABV/rating averages across the whole app.
 function clampAbv(value: number): number {
@@ -83,12 +104,12 @@ function escapeHtml(value: any): string {
 // Strips the password hash before a user profile ever reaches a client response.
 // Nothing client-side needs to read this back, and a hash still enables offline
 // dictionary/brute-force attempts if leaked, so it should never leave the server.
-function stripPassword<T extends { password?: any }>(user: T): Omit<T, "password"> {
-  const { password, ...rest } = user;
+function stripPassword<T extends { password?: any; recoveryCodeHash?: any }>(user: T): Omit<T, "password" | "recoveryCodeHash"> {
+  const { password, recoveryCodeHash, ...rest } = user;
   return rest;
 }
 
-function stripPasswords<T extends { password?: any }>(users: T[]): Omit<T, "password">[] {
+function stripPasswords<T extends { password?: any; recoveryCodeHash?: any }>(users: T[]): Omit<T, "password" | "recoveryCodeHash">[] {
   return users.map(stripPassword);
 }
 
@@ -3089,7 +3110,7 @@ app.post("/api/login", async (req, res) => {
     await saveUser(user);
   }
 
-  const { password: _pw, ...safeUser } = user;
+  const { password: _pw, recoveryCodeHash: _rch, ...safeUser } = user;
   res.json({ success: true, user: safeUser });
 });
 
@@ -3102,7 +3123,7 @@ app.get("/api/users", async (req, res) => {
   // app, so the only legitimate reason to see one is a user loading their own profile to
   // edit it, which is why the requesting user's own email (if identified) is kept.
   res.json(
-    list.map(({ password, email, ...rest }) => ({
+    list.map(({ password, email, recoveryCodeHash, ...rest }) => ({
       ...rest,
       ...(viewerUsername && rest.username.toLowerCase() === viewerUsername ? { email } : {}),
     }))
@@ -3167,6 +3188,11 @@ app.post("/api/users", async (req, res) => {
     }
   }
 
+  // New accounts get a one-time recovery code (this app has no email infra to send a
+  // reset link through, so this is the self-service account-recovery mechanism). It's
+  // generated here, hashed at rest, and the ONLY plaintext copy is returned once below.
+  const newRecoveryCode = !existingUser ? generateRecoveryCode() : undefined;
+
   const profile: UserProfile = {
     username,
     favoriteStyle,
@@ -3176,6 +3202,7 @@ app.post("/api/users", async (req, res) => {
     password: password
       ? hashPassword(password)
       : (existingUser ? existingUser.password : hashPassword("Pints!")),
+    recoveryCodeHash: newRecoveryCode ? hashPassword(newRecoveryCode) : (existingUser ? existingUser.recoveryCodeHash : undefined),
     realName: realName || (existingUser ? existingUser.realName : undefined),
     photoUrl: photoUrl !== undefined ? photoUrl : (existingUser ? existingUser.photoUrl : undefined),
     email: email !== undefined ? (email.trim() || undefined) : (existingUser ? existingUser.email : undefined),
@@ -3203,8 +3230,72 @@ app.post("/api/users", async (req, res) => {
     }
   }
 
-  const { password: _savedPw, ...safeSaved } = saved;
-  res.json(safeSaved);
+  const { password: _savedPw, recoveryCodeHash: _savedRch, ...safeSaved } = saved;
+  res.json(newRecoveryCode ? { ...safeSaved, recoveryCode: newRecoveryCode } : safeSaved);
+});
+
+// POST Reset Password via Recovery Code (no email infra in this app - the recovery
+// code shown once at signup/regeneration is the self-service account-recovery path)
+app.post("/api/users/:username/reset-password", async (req, res) => {
+  const username = (req.params.username || "").toString();
+  const recoveryCode = normalizeRecoveryCode(req.body.recoveryCode);
+  const newPassword = (req.body.newPassword || "").toString();
+
+  if (!recoveryCode || !newPassword) {
+    res.status(400).json({ error: "Recovery code and new password are required." });
+    return;
+  }
+  if (newPassword.length < 4) {
+    res.status(400).json({ error: "Password must be at least 4 characters." });
+    return;
+  }
+
+  const allUsers = await getAllUsers();
+  const user = allUsers.find((u) => u.username.toLowerCase() === username.toLowerCase());
+  if (!user) {
+    res.status(404).json({ error: "User not found." });
+    return;
+  }
+
+  if (!user.recoveryCodeHash || !verifyPassword(recoveryCode, user.recoveryCodeHash)) {
+    res.status(401).json({ error: "That recovery code doesn't match. Double-check it or contact support if you've lost it." });
+    return;
+  }
+
+  // Rotate the recovery code on every successful use, same principle as a single-use
+  // token - a leaked-then-used code shouldn't keep working afterward.
+  const nextRecoveryCode = generateRecoveryCode();
+  user.password = hashPassword(newPassword);
+  user.recoveryCodeHash = hashPassword(nextRecoveryCode);
+  await saveUser(user);
+
+  res.json({ success: true, recoveryCode: nextRecoveryCode });
+});
+
+// POST Regenerate Recovery Code (for already-logged-in users, including accounts
+// created before this feature existed and therefore have no recovery code yet)
+app.post("/api/users/:username/recovery-code", async (req, res) => {
+  const username = (req.params.username || "").toString();
+  const currentPassword = (req.body.currentPassword || "").toString();
+
+  const allUsers = await getAllUsers();
+  const user = allUsers.find((u) => u.username.toLowerCase() === username.toLowerCase());
+  if (!user) {
+    res.status(404).json({ error: "User not found." });
+    return;
+  }
+
+  const storedPassword = user.password || "Pints!";
+  if (!verifyPassword(currentPassword, storedPassword)) {
+    res.status(401).json({ error: "Incorrect current password." });
+    return;
+  }
+
+  const recoveryCode = generateRecoveryCode();
+  user.recoveryCodeHash = hashPassword(recoveryCode);
+  await saveUser(user);
+
+  res.json({ success: true, recoveryCode });
 });
 
 // POST Send Friend Request

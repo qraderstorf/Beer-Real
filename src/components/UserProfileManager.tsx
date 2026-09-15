@@ -101,6 +101,9 @@ export default function UserProfileManager({
   const [myBio, setMyBio] = useState("");
   const [myCurrentPassword, setMyCurrentPassword] = useState("");
   const [myNewPassword, setMyNewPassword] = useState("");
+  const [regeneratingRecoveryCode, setRegeneratingRecoveryCode] = useState(false);
+  const [recoveryCodeError, setRecoveryCodeError] = useState<string | null>(null);
+  const [newRecoveryCode, setNewRecoveryCode] = useState<string | null>(null);
   const [myPhotoUrl, setMyPhotoUrl] = useState<string | null>(null);
   const myPhotoPreview = useRetryImage(myPhotoUrl);
   const [myError, setMyError] = useState<string | null>(null);
@@ -335,6 +338,8 @@ export default function UserProfileManager({
         setMyBio(profile.bio || "");
         setMyCurrentPassword("");
         setMyNewPassword("");
+        setNewRecoveryCode(null);
+        setRecoveryCodeError(null);
         setMyRealName(profile.realName || "");
         setMyEmail(profile.email || "");
         setMyPhotoUrl(profile.photoUrl || null);
@@ -394,6 +399,34 @@ export default function UserProfileManager({
       setMyError(err.message || "An error occurred while saving profile changes.");
     } finally {
       setIsUpdatingMyProfile(false);
+    }
+  };
+
+  // Regenerates the self-service password-recovery code (also covers accounts created
+  // before this feature existed and so have never had one). Requires the current
+  // password as proof of identity, same as any other account change on this screen.
+  const handleRegenerateRecoveryCode = async () => {
+    if (!myCurrentPassword) {
+      setRecoveryCodeError("Enter your current password above first, then regenerate.");
+      return;
+    }
+    setRegeneratingRecoveryCode(true);
+    setRecoveryCodeError(null);
+    try {
+      const response = await fetch(`/api/users/${encodeURIComponent(currentUser)}/recovery-code`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword: myCurrentPassword }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to generate a recovery code.");
+      }
+      setNewRecoveryCode(data.recoveryCode);
+    } catch (err: any) {
+      setRecoveryCodeError(err.message || "Failed to generate a recovery code.");
+    } finally {
+      setRegeneratingRecoveryCode(false);
     }
   };
 
@@ -1201,6 +1234,36 @@ export default function UserProfileManager({
                         onChange={(e) => setMyNewPassword(e.target.value)}
                         className="w-full px-3 py-2 border border-slate-200 bg-white rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-800 transition-all"
                       />
+                    </div>
+
+                    {/* Recovery code - the self-service password-recovery mechanism (no email
+                        infra exists to send a reset link through). Regenerating requires the
+                        current password field above and immediately invalidates any older code. */}
+                    <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/60 space-y-2">
+                      <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Recovery Code</p>
+                      <p className="text-[11px] text-slate-500 leading-relaxed font-medium">
+                        Used to reset your password if you forget it. Enter your current password above, then generate one - it's shown only once.
+                      </p>
+                      {newRecoveryCode ? (
+                        <div className="flex items-center justify-between gap-2 bg-white border-2 border-dashed border-amber-400 rounded-lg px-3 py-2">
+                          <span className="font-mono text-sm font-extrabold tracking-wider text-slate-800 select-all">
+                            {newRecoveryCode}
+                          </span>
+                          <span className="text-[9px] font-bold text-amber-600 uppercase shrink-0">Save this now</span>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleRegenerateRecoveryCode}
+                          disabled={regeneratingRecoveryCode}
+                          className="text-xs font-bold text-amber-600 hover:text-amber-700 hover:underline disabled:opacity-50"
+                        >
+                          {regeneratingRecoveryCode ? "Generating..." : "Generate a new recovery code"}
+                        </button>
+                      )}
+                      {recoveryCodeError && (
+                        <p className="text-red-600 text-[11px] font-semibold">{recoveryCodeError}</p>
+                      )}
                     </div>
                   </div>
 

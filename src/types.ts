@@ -33,6 +33,7 @@ export interface UserProfile {
   avatar: string; // Emoji avatar or standard icon name
   bio?: string;
   password?: string;
+  recoveryCodeHash?: string; // hashed self-service password-recovery code (see server.ts hashPassword) - never sent to clients
   realName?: string;
   photoUrl?: string;
   email?: string;
