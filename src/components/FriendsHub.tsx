@@ -41,26 +41,59 @@ export default function FriendsHub({
     [users, currentUser]
   );
 
-  const discoverable = useMemo(() => {
+  // Anyone eligible to show up in Find at all (not already a friend/pending/blocked).
+  const candidatePool = useMemo(() => {
     const friendsLower = myFriends.map((f) => f.toLowerCase());
     const outgoingLower = myOutgoingRequests.map((f) => f.toLowerCase());
     const myBlockedLower = (me?.blockedUsers || []).map((f) => f.toLowerCase());
-    return users
-      .filter(
-        (u) =>
-          u.username.toLowerCase() !== currentUser.toLowerCase() &&
-          !friendsLower.includes(u.username.toLowerCase()) &&
-          !outgoingLower.includes(u.username.toLowerCase()) &&
-          !myBlockedLower.includes(u.username.toLowerCase()) &&
-          !(u.blockedUsers || []).some((b) => b.toLowerCase() === currentUser.toLowerCase())
-      )
-      .filter((u) => {
-        if (!search.trim()) return true;
-        const q = search.toLowerCase();
-        return u.username.toLowerCase().includes(q) || (u.realName || "").toLowerCase().includes(q);
+    return users.filter(
+      (u) =>
+        u.username.toLowerCase() !== currentUser.toLowerCase() &&
+        !friendsLower.includes(u.username.toLowerCase()) &&
+        !outgoingLower.includes(u.username.toLowerCase()) &&
+        !myBlockedLower.includes(u.username.toLowerCase()) &&
+        !(u.blockedUsers || []).some((b) => b.toLowerCase() === currentUser.toLowerCase())
+    );
+  }, [users, currentUser, myFriends, myOutgoingRequests, me]);
+
+  const isSearching = search.trim().length > 0;
+
+  // Without a search query, Find used to list literally every other user in the app -
+  // fine with a handful of accounts, but it turns into an unmanaged public directory
+  // (full name + avatar of every signed-up user, visible to anyone signed in) as the
+  // app grows. Instead: no query shows a small, bounded "people you may know" list
+  // (mutual-friends-first), and a query searches the full pool but still caps results.
+  const MAX_SUGGESTIONS = 12;
+  const MAX_SEARCH_RESULTS = 50;
+
+  const discoverable = useMemo(() => {
+    if (isSearching) {
+      const q = search.trim().toLowerCase();
+      return candidatePool
+        .filter((u) => u.username.toLowerCase().includes(q) || (u.realName || "").toLowerCase().includes(q))
+        .sort((a, b) => {
+          const aPrefix = a.username.toLowerCase().startsWith(q) ? 0 : 1;
+          const bPrefix = b.username.toLowerCase().startsWith(q) ? 0 : 1;
+          if (aPrefix !== bPrefix) return aPrefix - bPrefix;
+          return a.username.localeCompare(b.username);
+        })
+        .slice(0, MAX_SEARCH_RESULTS);
+    }
+
+    const myFriendsLower = new Set(myFriends.map((f) => f.toLowerCase()));
+    const mutualCount = (u: UserProfile) =>
+      (u.friends || []).filter((f) => myFriendsLower.has(f.toLowerCase())).length;
+
+    return [...candidatePool]
+      .sort((a, b) => {
+        const mutualDiff = mutualCount(b) - mutualCount(a);
+        if (mutualDiff !== 0) return mutualDiff;
+        // No mutuals to go on (e.g. a brand new account) - surface newest members
+        // first so there's still something useful here instead of an empty list.
+        return (b.joinedDate || "").localeCompare(a.joinedDate || "");
       })
-      .sort((a, b) => a.username.localeCompare(b.username));
-  }, [users, currentUser, myFriends, myOutgoingRequests, search]);
+      .slice(0, MAX_SUGGESTIONS);
+  }, [candidatePool, isSearching, search, myFriends]);
 
   const runAction = async (key: string, fn: () => Promise<void>) => {
     setPendingAction(key);
@@ -319,16 +352,22 @@ export default function FriendsHub({
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by name or username..."
+                placeholder="Search everyone by name or username..."
                 className="w-full pl-9 pr-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all placeholder:text-slate-400"
               />
             </div>
 
+            {!isSearching && discoverable.length > 0 && (
+              <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 px-0.5">
+                People you may know
+              </p>
+            )}
+
             <div className="space-y-1.5 max-h-[420px] overflow-y-auto custom-scrollbar">
               {discoverable.length === 0 ? (
                 <EmptyState
-                  emoji="🎉"
-                  text={search.trim() ? "No one matches that search." : "You've added everyone! Nice work."}
+                  emoji={isSearching ? "🔍" : "🎉"}
+                  text={isSearching ? "No one matches that search." : "You've added everyone we could suggest - search by name or username to find someone specific."}
                 />
               ) : (
                 discoverable.map((u) => (
