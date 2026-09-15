@@ -121,14 +121,41 @@ export function getMostDrankBeerForUser(username: string, logs: BeerLog[]): stri
   return calculateUserStats(logs, username).topBeer;
 }
 
-export function compressAndResizeImage(
+function isHeicFile(file: File): boolean {
+  const type = (file.type || "").toLowerCase();
+  if (type === "image/heic" || type === "image/heif") return true;
+  const name = (file.name || "").toLowerCase();
+  return name.endsWith(".heic") || name.endsWith(".heif");
+}
+
+// HEIC is the iPhone camera's default format. WebKit (Safari, and every iOS browser -
+// Apple requires them all to use WKWebView) decodes it natively via <img>, but desktop
+// Chrome/Firefox and Android Chrome can't, so the canvas-based compression below would
+// otherwise just silently fail to load the image for those users. Converted lazily via
+// dynamic import so the ~2.7MB WASM decoder only ever loads for someone actually
+// uploading a HEIC file, not for every photo upload in the app.
+export async function convertHeicIfNeeded(file: File): Promise<File> {
+  if (!isHeicFile(file)) return file;
+  try {
+    const heic2any = (await import("heic2any")).default;
+    const result = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.9 });
+    const blob = Array.isArray(result) ? result[0] : result;
+    return new File([blob], file.name.replace(/\.hei[cf]$/i, ".jpg"), { type: "image/jpeg" });
+  } catch (err) {
+    console.error("[HEIC] Conversion failed - falling back to the original file:", err);
+    return file;
+  }
+}
+
+export async function compressAndResizeImage(
   file: File,
   maxWidth = 600,
   maxHeight = 600,
   quality = 0.5
 ): Promise<string> {
+  const sourceFile = await convertHeicIfNeeded(file);
   return new Promise((resolve, reject) => {
-    const objectUrl = URL.createObjectURL(file);
+    const objectUrl = URL.createObjectURL(sourceFile);
     const img = new Image();
     img.src = objectUrl;
 
@@ -156,7 +183,7 @@ export function compressAndResizeImage(
         if (!ctx) {
           URL.revokeObjectURL(objectUrl);
           const reader = new FileReader();
-          reader.readAsDataURL(file);
+          reader.readAsDataURL(sourceFile);
           reader.onload = (e) => resolve(e.target?.result as string);
           reader.onerror = (e) => reject(e);
           return;

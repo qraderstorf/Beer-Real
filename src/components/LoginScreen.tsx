@@ -2,7 +2,7 @@ import React, { useState, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Lock, User, Mail, PlusCircle, Smile, Sparkles, AlertCircle, Eye, EyeOff, Beer, ZoomIn, ZoomOut, KeyRound, Copy, Check, ShieldCheck } from "lucide-react";
 import { UserProfile } from "../types";
-import { compressImage } from "../utils";
+import { compressImage, convertHeicIfNeeded } from "../utils";
 import Logo from "./Logo";
 
 interface LoginScreenProps {
@@ -92,6 +92,19 @@ export default function LoginScreen({ users, onLoginSuccess, onProfileCreated }:
         y: touch.clientY - dragStart.current.y
       });
     }
+  };
+
+  // HEIC (the iPhone camera default) doesn't decode via <img> on non-WebKit browsers,
+  // so it needs converting to JPEG before it can be shown in the crop preview at all.
+  const loadFileForCropping = async (file: File) => {
+    const converted = await convertHeicIfNeeded(file);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (event.target?.result) {
+        setCroppingImageSrc(event.target.result as string);
+      }
+    };
+    reader.readAsDataURL(converted);
   };
 
   const handleApplyCrop = () => {
@@ -528,14 +541,7 @@ export default function LoginScreen({ users, onLoginSuccess, onProfileCreated }:
                       onDrop={(e) => {
                         e.preventDefault();
                         if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                          const file = e.dataTransfer.files[0];
-                          const reader = new FileReader();
-                          reader.onload = (event) => {
-                            if (event.target?.result) {
-                              setCroppingImageSrc(event.target.result as string);
-                            }
-                          };
-                          reader.readAsDataURL(file);
+                          loadFileForCropping(e.dataTransfer.files[0]);
                         }
                       }}
                       onClick={() => document.getElementById("register-photo-input")?.click()}
@@ -573,14 +579,7 @@ export default function LoginScreen({ users, onLoginSuccess, onProfileCreated }:
                       className="hidden"
                       onChange={(e) => {
                         if (e.target.files && e.target.files[0]) {
-                          const file = e.target.files[0];
-                          const reader = new FileReader();
-                          reader.onload = (event) => {
-                            if (event.target?.result) {
-                              setCroppingImageSrc(event.target.result as string);
-                            }
-                          };
-                          reader.readAsDataURL(file);
+                          loadFileForCropping(e.target.files[0]);
                         }
                       }}
                     />

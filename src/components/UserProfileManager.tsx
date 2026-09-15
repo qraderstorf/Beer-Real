@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Check, Calendar, Sparkles, X, Smile, Trash2, Trophy, Flame, Award, Shield, Heart, ZoomIn, ZoomOut, Pencil, ArrowLeft, Ban, Flag } from "lucide-react";
 import { UserProfile, BeerLog, ContentReport, isSeymoreBeers } from "../types";
-import { getMostDrankBeerForUser, compressImage, useRetryImage } from "../utils";
+import { getMostDrankBeerForUser, compressImage, useRetryImage, convertHeicIfNeeded } from "../utils";
 import UserAvatar from "./UserAvatar";
 import FriendsHub from "./FriendsHub";
 import WeeklyRecap from "./WeeklyRecap";
@@ -355,6 +355,19 @@ export default function UserProfileManager({
     }
     setPrevOpen(isOpen);
   }, [currentUser, users, isOpen, prevOpen, loadedUsername]);
+
+  // HEIC (the iPhone camera default) doesn't decode via <img> on non-WebKit browsers,
+  // so it needs converting to JPEG before it can be shown in the crop preview at all.
+  const loadFileForCropping = async (file: File) => {
+    const converted = await convertHeicIfNeeded(file);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (event.target?.result) {
+        setCroppingImageSrc(event.target.result as string);
+      }
+    };
+    reader.readAsDataURL(converted);
+  };
 
   // Handle Edit Profile submission
   const handleEditMyProfileSubmit = async (e: React.FormEvent) => {
@@ -1064,14 +1077,7 @@ export default function UserProfileManager({
                         onDrop={(e) => {
                           e.preventDefault();
                           if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                            const file = e.dataTransfer.files[0];
-                            const reader = new FileReader();
-                            reader.onload = (event) => {
-                              if (event.target?.result) {
-                                setCroppingImageSrc(event.target.result as string);
-                              }
-                            };
-                            reader.readAsDataURL(file);
+                            loadFileForCropping(e.dataTransfer.files[0]);
                           }
                         }}
                         onClick={() => document.getElementById("profile-photo-input")?.click()}
@@ -1110,14 +1116,7 @@ export default function UserProfileManager({
                         className="hidden"
                         onChange={(e) => {
                           if (e.target.files && e.target.files[0]) {
-                            const file = e.target.files[0];
-                            const reader = new FileReader();
-                            reader.onload = (event) => {
-                              if (event.target?.result) {
-                                setCroppingImageSrc(event.target.result as string);
-                              }
-                            };
-                            reader.readAsDataURL(file);
+                            loadFileForCropping(e.target.files[0]);
                           }
                         }}
                       />
