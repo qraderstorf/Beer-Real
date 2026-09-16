@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { Star, MessageSquare, Flame, Trash2, Heart, Search, Filter, Award, RefreshCw, Edit, Camera, Siren, Plus, Smile, Pin, X, Flag } from "lucide-react";
 import { BeerLog, UserProfile, isSeymoreBeers, Pub } from "../types";
@@ -216,45 +217,216 @@ const REACTION_TYPES = [
   { key: "dislike", emoji: "👎", label: "Imposter Pint" }
 ];
 
-const CUSTOM_EMOJIS = [
-  { emoji: "🍺", label: "Creamy" },
-  { emoji: "🍻", label: "Cheers" },
-  { emoji: "🌙", label: "Night night" },
-  { emoji: "🥂", label: "Posh" },
-  { emoji: "🍷", label: "Snooty" },
-  { emoji: "🥃", label: "Stiff" },
-  { emoji: "🍹", label: "Fruity" },
-  { emoji: "🔥", label: "Banger" },
-  { emoji: "❤️", label: "Mates" },
-  { emoji: "👍", label: "Solid" },
-  { emoji: "👎", label: "Imposter" },
-  { emoji: "😂", label: "Banter" },
-  { emoji: "🎉", label: "Session" },
-  { emoji: "🚀", label: "Sent" },
-  { emoji: "👀", label: "FOMO" },
-  { emoji: "💯", label: "Elite" },
-  { emoji: "👏", label: "Respect" },
-  { emoji: "🙌", label: "Preach" },
-  { emoji: "🤩", label: "Stellar" },
-  { emoji: "🥳", label: "Rowdy" },
-  { emoji: "😎", label: "Smooth" },
-  { emoji: "🤔", label: "Dodgy" },
-  { emoji: "😮", label: "Gasp" },
-  { emoji: "🎯", label: "Nailed It" },
-  { emoji: "🍕", label: "SoberUp" },
-  { emoji: "🍔", label: "PubGrub" },
-  { emoji: "🍟", label: "Chips" },
-  { emoji: "🥨", label: "Twisted" },
-  { emoji: "🥓", label: "Crispy" },
-  { emoji: "✨", label: "Magic" },
-  { emoji: "🌟", label: "Legend" },
-  { emoji: "👑", label: "PintKing" },
-  { emoji: "🏰", label: "TheLocal" },
-  { emoji: "🍀", label: "Lucky" },
-  { emoji: "⚓", label: "Sunk" },
-  { emoji: "🏆", label: "Cheers" },
-  { emoji: "💔", label: "Spilled" }
+// Every reaction (preset or custom) renders in one of these color themes - shared
+// between the picker grid (so a cell previews the color its pill will take) and the
+// active pill on a post. Tailwind's build-time class scanner needs every class as a
+// literal substring somewhere in source, so these are spelled out in full rather than
+// built from `bg-${theme}-50`-style template strings, which it can't see and won't
+// generate.
+type ReactionTheme = "amber" | "orange" | "rose" | "fuchsia" | "sky" | "emerald" | "slate" | "indigo";
+
+const THEME_STYLES: Record<ReactionTheme, { cell: string; active: string; unselected: string }> = {
+  amber: {
+    cell: "bg-amber-50/90 dark:bg-amber-950/40 border-amber-200/80 dark:border-amber-800/80 text-amber-800 dark:text-amber-300",
+    active: "bg-amber-500 text-white border-amber-500 ring-2 ring-amber-500/20 shadow-xs",
+    unselected: "bg-amber-50/90 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200 border-amber-200/80 dark:border-amber-800/80 hover:bg-amber-100 dark:hover:bg-amber-900/50",
+  },
+  orange: {
+    cell: "bg-orange-50/90 dark:bg-orange-950/40 border-orange-200/80 dark:border-orange-800/80 text-orange-800 dark:text-orange-300",
+    active: "bg-orange-600 text-white border-orange-600 ring-2 ring-orange-500/20 shadow-xs",
+    unselected: "bg-orange-50/90 text-orange-900 dark:bg-orange-950/40 dark:text-orange-300 border-orange-200/80 dark:border-orange-800/80 hover:bg-orange-100 dark:hover:bg-orange-900/50",
+  },
+  rose: {
+    cell: "bg-rose-50/90 dark:bg-rose-950/40 border-rose-200/80 dark:border-rose-800/80 text-rose-800 dark:text-rose-300",
+    active: "bg-rose-600 text-white border-rose-600 ring-2 ring-rose-500/20 shadow-xs",
+    unselected: "bg-rose-50/90 text-rose-900 dark:bg-rose-950/40 dark:text-rose-300 border-rose-200/80 dark:border-rose-800/80 hover:bg-rose-100 dark:hover:bg-rose-900/50",
+  },
+  fuchsia: {
+    cell: "bg-fuchsia-50/90 dark:bg-fuchsia-950/40 border-fuchsia-200/80 dark:border-fuchsia-800/80 text-fuchsia-800 dark:text-fuchsia-300",
+    active: "bg-fuchsia-600 text-white border-fuchsia-600 ring-2 ring-fuchsia-500/20 shadow-xs",
+    unselected: "bg-fuchsia-50/90 text-fuchsia-900 dark:bg-fuchsia-950/40 dark:text-fuchsia-300 border-fuchsia-200/80 dark:border-fuchsia-800/80 hover:bg-fuchsia-100 dark:hover:bg-fuchsia-900/50",
+  },
+  sky: {
+    cell: "bg-sky-50/90 dark:bg-sky-950/40 border-sky-200/80 dark:border-sky-800/80 text-sky-800 dark:text-sky-300",
+    active: "bg-sky-600 text-white border-sky-600 ring-2 ring-sky-500/20 shadow-xs",
+    unselected: "bg-sky-50/90 text-sky-900 dark:bg-sky-950/40 dark:text-sky-300 border-sky-200/80 dark:border-sky-800/80 hover:bg-sky-100 dark:hover:bg-sky-900/50",
+  },
+  emerald: {
+    cell: "bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-200/80 dark:border-emerald-800/80 text-emerald-800 dark:text-emerald-300",
+    active: "bg-emerald-600 text-white border-emerald-600 ring-2 ring-emerald-500/20 shadow-xs",
+    unselected: "bg-emerald-50/90 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200/80 dark:border-emerald-800/80 hover:bg-emerald-100 dark:hover:bg-emerald-900/50",
+  },
+  slate: {
+    cell: "bg-slate-100/90 dark:bg-slate-800/60 border-slate-200/80 dark:border-slate-700/80 text-slate-700 dark:text-slate-300",
+    active: "bg-slate-600 text-white border-slate-600 ring-2 ring-slate-500/20 shadow-xs",
+    unselected: "bg-slate-100/90 text-slate-800 dark:bg-slate-800/60 dark:text-slate-300 border-slate-200/80 dark:border-slate-700/80 hover:bg-slate-200 dark:hover:bg-slate-700/60",
+  },
+  indigo: {
+    cell: "bg-indigo-50/90 dark:bg-indigo-950/40 border-indigo-200/80 dark:border-indigo-800/80 text-indigo-800 dark:text-indigo-300",
+    active: "bg-indigo-600 text-white border-indigo-600 ring-2 ring-indigo-500/20 shadow-xs",
+    unselected: "bg-indigo-50/90 text-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-300 border-indigo-200/80 dark:border-indigo-800/80 hover:bg-indigo-100 dark:hover:bg-indigo-900/50",
+  },
+};
+
+// Grouped by theme (rather than the original arbitrary order) so the picker grid reads
+// as color "neighborhoods" instead of a randomly speckled wall of emoji.
+const CUSTOM_EMOJIS: { emoji: string; label: string; theme: ReactionTheme }[] = [
+  // Not cosmetically special, but real usage data shows this as by far the most-used
+  // custom reaction on real posts (well ahead of everything else in this list) - it's
+  // pinned first so the picker doesn't bury what people already reach for most.
+  // ("Drunk" 🥴 has similar historical usage but is deliberately left out - not a
+  // vibe worth encouraging on a platform centered around drinking.)
+  { emoji: "🍑", label: "Juicy", theme: "rose" },
+  { emoji: "🍺", label: "Creamy", theme: "amber" },
+  { emoji: "🍻", label: "Cheers", theme: "amber" },
+  { emoji: "✨", label: "Magic", theme: "amber" },
+  { emoji: "🌟", label: "Legend", theme: "amber" },
+  { emoji: "👑", label: "PintKing", theme: "amber" },
+  { emoji: "🏰", label: "TheLocal", theme: "amber" },
+  { emoji: "🏆", label: "Champ", theme: "amber" },
+  { emoji: "🥃", label: "Stiff", theme: "orange" },
+  { emoji: "🔥", label: "Banger", theme: "orange" },
+  { emoji: "👀", label: "FOMO", theme: "orange" },
+  { emoji: "❤️", label: "Mates", theme: "rose" },
+  { emoji: "👎", label: "Imposter", theme: "rose" },
+  { emoji: "💔", label: "Spilled", theme: "rose" },
+  { emoji: "🥂", label: "Posh", theme: "fuchsia" },
+  { emoji: "🍷", label: "Snooty", theme: "fuchsia" },
+  { emoji: "🎉", label: "Session", theme: "fuchsia" },
+  { emoji: "🤩", label: "Stellar", theme: "fuchsia" },
+  { emoji: "🥳", label: "Rowdy", theme: "fuchsia" },
+  { emoji: "🍹", label: "Fruity", theme: "sky" },
+  { emoji: "🚀", label: "Sent", theme: "sky" },
+  { emoji: "😎", label: "Smooth", theme: "sky" },
+  { emoji: "⚓", label: "Sunk", theme: "sky" },
+  { emoji: "👍", label: "Solid", theme: "emerald" },
+  { emoji: "💯", label: "Elite", theme: "emerald" },
+  { emoji: "👏", label: "Respect", theme: "emerald" },
+  { emoji: "🙌", label: "Preach", theme: "emerald" },
+  { emoji: "🎯", label: "Nailed It", theme: "emerald" },
+  { emoji: "🍀", label: "Lucky", theme: "emerald" },
+  { emoji: "😂", label: "Banter", theme: "slate" },
+  { emoji: "🍕", label: "SoberUp", theme: "slate" },
+  { emoji: "🍔", label: "PubGrub", theme: "slate" },
+  { emoji: "🍟", label: "Chips", theme: "slate" },
+  { emoji: "🥨", label: "Twisted", theme: "slate" },
+  { emoji: "🥓", label: "Crispy", theme: "slate" },
+  { emoji: "🌙", label: "Night night", theme: "indigo" },
+  { emoji: "🤔", label: "Dodgy", theme: "indigo" },
+  { emoji: "😮", label: "Gasp", theme: "indigo" },
 ];
+
+function getReactionTheme(key: string): ReactionTheme {
+  const byEmoji = CUSTOM_EMOJIS.find((e) => e.emoji === key);
+  if (byEmoji) return byEmoji.theme;
+  const byLabel = CUSTOM_EMOJIS.find((e) => e.label.toLowerCase() === key.toLowerCase());
+  return byLabel?.theme || "amber";
+}
+
+// Renders the custom-emoji grid in a fixed-position portal anchored to the "+" button's
+// live on-screen position. A portal (rather than an absolutely-positioned child of the
+// post card) is required here: post cards are wrapped in framer-motion's `motion.div`
+// with layout animations, which apply a CSS transform and would silently make any
+// `position: fixed` descendant relative to that card instead of the viewport - exactly
+// what was clipping the picker off-screen whenever it opened near the top of the feed.
+// Position is recomputed from the anchor element on every scroll/resize (rather than
+// closing on scroll) so it tracks the button instead of visually detaching from it.
+function ReactionEmojiPicker({
+  anchorEl,
+  onSelect,
+  onClose,
+}: {
+  anchorEl: HTMLElement;
+  onSelect: (emoji: string) => void;
+  onClose: () => void;
+}) {
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const [style, setStyle] = useState<{ top: number; left: number } | null>(null);
+
+  useEffect(() => {
+    const margin = 8;
+    const popoverWidth = 260;
+
+    const reposition = () => {
+      if (!anchorEl.isConnected) {
+        onClose();
+        return;
+      }
+      const anchorRect = anchorEl.getBoundingClientRect();
+      const popoverHeight = popoverRef.current?.offsetHeight || 320;
+
+      const roomAbove = anchorRect.top - margin;
+      const top =
+        roomAbove >= popoverHeight
+          ? Math.max(margin, anchorRect.top - popoverHeight - margin)
+          : Math.min(anchorRect.bottom + margin, window.innerHeight - margin - popoverHeight);
+
+      let left = anchorRect.left;
+      left = Math.min(left, window.innerWidth - popoverWidth - margin);
+      left = Math.max(left, margin);
+
+      setStyle({ top, left });
+    };
+
+    reposition();
+
+    let rafId: number | null = null;
+    const onScrollOrResize = () => {
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        reposition();
+      });
+    };
+    window.addEventListener("scroll", onScrollOrResize, { capture: true, passive: true });
+    window.addEventListener("resize", onScrollOrResize);
+    return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      window.removeEventListener("scroll", onScrollOrResize, true);
+      window.removeEventListener("resize", onScrollOrResize);
+    };
+  }, [anchorEl, onClose]);
+
+  return createPortal(
+    <>
+      <div className="fixed inset-0 z-[95]" onClick={onClose} onTouchStart={onClose} />
+      <div
+        ref={popoverRef}
+        onClick={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        style={{
+          position: "fixed",
+          top: style?.top ?? -9999,
+          left: style?.left ?? -9999,
+          width: 260,
+          visibility: style ? "visible" : "hidden",
+        }}
+        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 shadow-2xl z-[96] max-h-[340px] overflow-y-auto custom-scrollbar"
+      >
+        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 pl-0.5">React with Emoji</span>
+        <div className="grid grid-cols-4 gap-1 mt-1.5">
+          {CUSTOM_EMOJIS.map((em) => {
+            const theme = THEME_STYLES[em.theme];
+            return (
+              <button
+                key={em.emoji}
+                type="button"
+                onClick={() => onSelect(em.emoji)}
+                className={`flex flex-col items-center justify-center gap-0.5 rounded-lg border py-1.5 px-0.5 transition-all active:scale-90 hover:scale-105 cursor-pointer select-none ${theme.cell}`}
+              >
+                <span className="text-lg leading-none">{em.emoji}</span>
+                <span className="text-[7.5px] font-black uppercase tracking-wide leading-none truncate max-w-full">
+                  {em.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </>,
+    document.body
+  );
+}
 
 export default function ActivityFeed({
   logs,
@@ -281,7 +453,7 @@ export default function ActivityFeed({
   hasMore
 }: ActivityFeedProps) {
   const [activeReactionTooltip, setActiveReactionTooltip] = useState<string | null>(null);
-  const [activeCustomEmojiLogId, setActiveCustomEmojiLogId] = useState<string | null>(null);
+  const [activeCustomEmojiPicker, setActiveCustomEmojiPicker] = useState<{ logId: string; el: HTMLElement } | null>(null);
   const [activeReportLogId, setActiveReportLogId] = useState<string | null>(null);
   const [reportReason, setReportReason] = useState("");
   const [reportNote, setReportNote] = useState("");
@@ -352,7 +524,7 @@ export default function ActivityFeed({
   useEffect(() => {
     const handleGlobalClick = () => {
       setActiveReactionTooltip(null);
-      setActiveCustomEmojiLogId(null);
+      setActiveCustomEmojiPicker(null);
     };
 
     document.addEventListener("click", handleGlobalClick);
@@ -1236,6 +1408,7 @@ export default function ActivityFeed({
                             {/* Additional Custom Active Reactions */}
                             {customReactions.map(({ key, emoji, label, list }) => {
                               const hasReacted = list.includes(currentUser);
+                              const theme = THEME_STYLES[getReactionTheme(key)];
                               return (
                                 <div key={key} className="relative group shrink-0">
                                   <button
@@ -1246,15 +1419,13 @@ export default function ActivityFeed({
                                       handleReact(log.id, key);
                                     }}
                                     className={`flex items-center gap-1.5 py-1 px-2.5 rounded-full text-[10px] font-extrabold border transition-all duration-150 active:scale-95 hover:scale-105 cursor-pointer select-none ${
-                                      hasReacted
-                                        ? "bg-amber-500 text-white border-amber-500 ring-2 ring-amber-500/20 shadow-sm font-black"
-                                        : "bg-amber-50/90 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800"
+                                      hasReacted ? `${theme.active} font-black` : theme.unselected
                                     }`}
                                   >
                                     <span className="text-[12px]">{emoji}</span>
                                     <span className="text-[10px] font-bold">{label}</span>
                                     <span className={`ml-0.5 px-1.5 py-0.2 rounded-full text-[9px] font-black ${
-                                      hasReacted ? "bg-black/25 text-white" : "bg-amber-200/80 dark:bg-amber-800 text-amber-900 dark:text-amber-100"
+                                      hasReacted ? "bg-black/25 text-white" : "bg-black/10 dark:bg-white/10 text-current"
                                     }`}>
                                       {list.length}
                                     </span>
@@ -1285,13 +1456,17 @@ export default function ActivityFeed({
                                 onClick={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
-                                  setActiveCustomEmojiLogId(activeCustomEmojiLogId === log.id ? null : log.id);
+                                  if (activeCustomEmojiPicker?.logId === log.id) {
+                                    setActiveCustomEmojiPicker(null);
+                                  } else {
+                                    setActiveCustomEmojiPicker({ logId: log.id, el: e.currentTarget });
+                                  }
                                 }}
                                 onTouchStart={(e) => {
                                   e.stopPropagation();
                                 }}
                                 className={`flex items-center justify-center w-6 h-6 sm:w-6.5 sm:h-6.5 rounded-full border transition-all cursor-pointer ${
-                                  activeCustomEmojiLogId === log.id
+                                  activeCustomEmojiPicker?.logId === log.id
                                     ? "bg-amber-500 border-amber-500 text-white"
                                     : "border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-amber-500"
                                 }`}
@@ -1300,40 +1475,15 @@ export default function ActivityFeed({
                                 <Plus className="w-3.5 h-3.5" />
                               </button>
 
-                              {activeCustomEmojiLogId === log.id && (
-                                <div
-                                  onClick={(e) => e.stopPropagation()}
-                                  onTouchStart={(e) => e.stopPropagation()}
-                                  className="absolute bottom-full mb-2 left-0 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-2 shadow-2xl z-40 flex flex-col gap-1.5 w-[212px] origin-bottom transition-all duration-150"
-                                >
-                                  <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 pl-1">React with Emoji</span>
-                                  <div className="grid grid-cols-6 gap-0.5">
-                                    {CUSTOM_EMOJIS.map((em) => (
-                                      <div key={em.emoji} className="relative group/emoji flex items-center justify-center animate-fade-in">
-                                        <button
-                                          onClick={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            handleReact(log.id, em.emoji);
-                                            setActiveCustomEmojiLogId(null);
-                                          }}
-                                          className="w-8 h-8 text-base rounded hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-90 transition-all cursor-pointer flex items-center justify-center select-none"
-                                          title={em.label}
-                                        >
-                                          {em.emoji}
-                                        </button>
-                                        
-                                        {/* Floating tooltip on hover */}
-                                        <div className="absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 opacity-0 group-hover/emoji:opacity-100 pointer-events-none transition-all duration-100 z-50 scale-90 group-hover/emoji:scale-100 flex flex-col items-center">
-                                          <div className="bg-slate-900/95 text-white text-[9px] font-black uppercase tracking-wider py-1 px-2 rounded shadow-xl border border-slate-800 whitespace-nowrap">
-                                            {em.label}
-                                          </div>
-                                          <div className="w-1.5 h-1.5 bg-slate-900 rotate-45 -mt-[3px] border-r border-b border-slate-800"></div>
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
+                              {activeCustomEmojiPicker?.logId === log.id && (
+                                <ReactionEmojiPicker
+                                  anchorEl={activeCustomEmojiPicker.el}
+                                  onClose={() => setActiveCustomEmojiPicker(null)}
+                                  onSelect={(emoji) => {
+                                    handleReact(log.id, emoji);
+                                    setActiveCustomEmojiPicker(null);
+                                  }}
+                                />
                               )}
                             </div>
                           </div>
