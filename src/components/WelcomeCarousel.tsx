@@ -19,19 +19,19 @@ const SLIDES: Slide[] = [
     icon: <Users className="w-6 h-6 text-amber-600" />,
     iconBg: "bg-amber-50 border-amber-100",
     title: "Welcome to BeerReal 🍻",
-    body: "BeerReal is built around community - your mates, your pints, your people. Log every pour, cheer on your crew, and keep your circle in the loop, one round at a time.",
+    body: "BeerReal is built around community - your mates, your pints, your online local pub. Log every pour, cheers your crew, and stay connected with your community near and far, one creamy pint at a time.",
   },
   {
     icon: <Camera className="w-6 h-6 text-sky-600" />,
     iconBg: "bg-sky-50 border-sky-100",
     title: "Log Every Pint",
-    body: "Snap a photo, rate it, and share what's in your glass. Every check-in shows up in your Live Feed so friends can see it and pile on the reactions.",
+    body: "Snap a photo, rate it, and share what's in your glass. Every check-in lands in the Live Feed, giving your mates a tasty pint of FOMO - especially when the crew's all together and they're not.",
   },
   {
     icon: <Siren className="w-6 h-6 text-rose-600" />,
     iconBg: "bg-rose-50 border-rose-100",
     title: "React & Rally",
-    body: "Comment, react with dozens of custom emojis, and hit FOMO Alert when a pint looks too good to miss - get 3+ alerts and the sirens start blaring on the post.",
+    body: "React with dozens of custom emojis, blast FOMO Alert on the pints worth chasing, and slap Imposter Pint on the ones that definitely aren't pints.",
   },
   {
     icon: <Landmark className="w-6 h-6 text-emerald-600" />,
