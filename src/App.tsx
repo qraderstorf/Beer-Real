@@ -13,6 +13,7 @@ import QuickLogWorkflow from "./components/QuickLogWorkflow";
 import UserAvatar from "./components/UserAvatar";
 import Logo from "./components/Logo";
 import FriendsHub from "./components/FriendsHub";
+import WelcomeCarousel from "./components/WelcomeCarousel";
 import { db, useFirestore } from "./firebase";
 import { collection, query, orderBy, limit, onSnapshot, getDocs, startAfter, where, QueryConstraint, disableNetwork } from "firebase/firestore";
 
@@ -105,6 +106,7 @@ export default function App() {
     currentUser ? `/api/users?viewerUsername=${encodeURIComponent(currentUser)}` : "/api/users";
 
   const [showFriendsOnboarding, setShowFriendsOnboarding] = useState(false);
+  const [showWelcomeCarousel, setShowWelcomeCarousel] = useState(false);
 
   // Usernames the current user has blocked, so their posts/comments can be
   // hidden client-side. A profile is the source of truth for the block list;
@@ -1469,6 +1471,17 @@ export default function App() {
         onLoginSuccess={handleLoginSuccess}
         onProfileCreated={(newProfile) => {
           setUsers((prev) => [...prev, newProfile]);
+          setShowWelcomeCarousel(true);
+        }}
+      />
+    );
+  }
+
+  if (showWelcomeCarousel) {
+    return (
+      <WelcomeCarousel
+        onDone={() => {
+          setShowWelcomeCarousel(false);
           setShowFriendsOnboarding(true);
         }}
       />
