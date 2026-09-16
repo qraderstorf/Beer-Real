@@ -1322,7 +1322,7 @@ export default function Statistics({
                     <UserAvatar username={entry.username} users={filteredUsers} className="w-9 h-9 text-lg" />
                     <div className="min-w-0">
                       <h4 className="font-extrabold text-slate-800 text-xs truncate group-hover:underline">{entry.username}</h4>
-                      <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider truncate">Clean Streak</p>
+                      <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider truncate">Record</p>
                     </div>
                   </div>
 
@@ -1521,6 +1521,7 @@ export default function Statistics({
               let ratingColorClass = "";
               let ratingBg = "";
               let ratingBorder = "";
+              let zoneColorHex = "";
 
               if (guinnessPercent < 25) {
                 ratingTitle = "Really Bad";
@@ -1528,18 +1529,21 @@ export default function Statistics({
                 ratingColorClass = "text-rose-500 dark:text-rose-400";
                 ratingBg = "bg-rose-500/5 dark:bg-rose-500/5";
                 ratingBorder = "border-rose-500/10";
+                zoneColorHex = "#f43f5e";
               } else if (guinnessPercent >= 25 && guinnessPercent < 75) {
                 ratingTitle = "Adequate";
                 ratingDesc = "⚖️ Average. Tolerable balance, but your soul still yearns for more creamy foam.";
                 ratingColorClass = "text-amber-500 dark:text-amber-400";
                 ratingBg = "bg-amber-500/5 dark:bg-amber-500/5";
                 ratingBorder = "border-amber-500/10";
+                zoneColorHex = "#f59e0b";
               } else {
                 ratingTitle = "Creamy Goodness";
                 ratingDesc = "✨ Stout Heaven! Absolute velvet perfection in your decision making.";
                 ratingColorClass = "text-emerald-500 dark:text-emerald-400";
                 ratingBg = "bg-emerald-500/5 dark:bg-emerald-500/5";
                 ratingBorder = "border-emerald-500/10";
+                zoneColorHex = "#10b981";
               }
               
               return (
@@ -1568,6 +1572,13 @@ export default function Statistics({
                         <filter id="gaugeShadow" x="-10%" y="-10%" width="120%" height="120%">
                           <feDropShadow dx="0" dy="2" stdDeviation="2" floodOpacity="0.15" />
                         </filter>
+                        <filter id="gaugeGlow" x="-60%" y="-60%" width="220%" height="220%">
+                          <feGaussianBlur stdDeviation="3.2" result="blur" />
+                          <feMerge>
+                            <feMergeNode in="blur" />
+                            <feMergeNode in="SourceGraphic" />
+                          </feMerge>
+                        </filter>
                       </defs>
 
                       {/* Gauge Arcs */}
@@ -1576,18 +1587,19 @@ export default function Statistics({
                         d="M 30,100 A 70,70 0 0,1 170,100"
                         fill="none"
                         stroke="#f1f5f9"
-                        strokeWidth="11"
+                        strokeWidth="14"
                         strokeLinecap="round"
                         className="dark:stroke-slate-800/40"
                       />
 
-                      {/* Single Guinness continuous gradient track representing the story from flat to stout */}
+                      {/* Single Guinness continuous gradient track representing the story from flat to stout - glowing so it actually pops instead of sitting flat against the card */}
                       <path
                         d="M 30,100 A 70,70 0 0,1 170,100"
                         fill="none"
                         stroke="url(#guinnessGaugeGrad)"
                         strokeWidth="11"
                         strokeLinecap="round"
+                        filter="url(#gaugeGlow)"
                       />
 
                       {/* Concentric premium thin golden outer rim */}
@@ -1610,8 +1622,20 @@ export default function Statistics({
                         opacity="0.4"
                       />
 
-                      {/* Center Needle & Pivot */}
-                      <g filter="url(#gaugeShadow)">
+                      {/* Tick marks for an instrument-panel feel */}
+                      {Array.from({ length: 9 }).map((_, i) => {
+                        const tAngle = (i / 8) * 180;
+                        const tRad = (tAngle * Math.PI) / 180;
+                        const rOuter = 84, rInner = i % 2 === 0 ? 74 : 78;
+                        const x1 = cx - rOuter * Math.cos(tRad), y1 = cy - rOuter * Math.sin(tRad);
+                        const x2 = cx - rInner * Math.cos(tRad), y2 = cy - rInner * Math.sin(tRad);
+                        return (
+                          <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="currentColor" className="text-slate-300 dark:text-slate-600" strokeWidth={i % 2 === 0 ? 2 : 1} strokeLinecap="round" />
+                        );
+                      })}
+
+                      {/* Center Needle & Pivot, glowing in the current zone's color */}
+                      <g filter="url(#gaugeGlow)">
                         {/* Needle */}
                         <line
                           x1={cx}
@@ -1632,18 +1656,23 @@ export default function Statistics({
                           strokeLinecap="round"
                         />
                         {/* Needle Pivot Center */}
-                        <circle cx={cx} cy={cy} r="8" fill="url(#goldGrad)" />
-                        <circle cx={cx} cy={cy} r="4" fill="#1E1B18" />
-                        <circle cx={cx} cy={cy} r="1.5" fill="#FDFBF7" />
+                        <circle cx={cx} cy={cy} r="9" fill={zoneColorHex} />
+                        <circle cx={cx} cy={cy} r="9" fill="none" stroke="#0b0f19" strokeWidth="1.5" />
+                        <circle cx={cx} cy={cy} r="3" fill="#0b0f19" />
                       </g>
 
                       {/* Gauge Labels & Ticks */}
                       <text x="21" y="118" textAnchor="middle" className="text-[9px] font-extrabold fill-slate-400 dark:fill-slate-500 uppercase tracking-wider">0%</text>
                       <text x="179" y="118" textAnchor="middle" className="text-[9px] font-extrabold fill-slate-400 dark:fill-slate-500 uppercase tracking-wider">100%</text>
-                      
-                      {/* Floating percentage readout moved higher and styled with goldGrad gradient */}
-                      <text x="100" y="15" textAnchor="middle" fill="url(#goldGrad)" className="text-[22px] font-black font-mono tracking-tight">{guinnessPercent}%</text>
                     </svg>
+
+                    {/* Big number readout - a colored chip matching the current zone rather than plain floating text */}
+                    <div
+                      className="absolute -top-1 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full font-black font-mono text-lg tracking-tight text-white shadow-lg"
+                      style={{ backgroundColor: zoneColorHex, boxShadow: `0 0 14px ${zoneColorHex}80` }}
+                    >
+                      {guinnessPercent}%
+                    </div>
                   </div>
 
                   {/* Playful rating review banner */}
