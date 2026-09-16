@@ -28,6 +28,22 @@ function isEmblemUrl(str: string | undefined): boolean {
   return str.startsWith("http://") || str.startsWith("https://") || str.startsWith("/") || str.startsWith("data:image");
 }
 
+// Color scheme for the semicircle gauge widgets (Beverage/ABV/Rating gauges), keyed by
+// widget type so each one's gradient direction actually means something instead of the
+// same flat gray-to-gold dial regardless of what's being measured: ABV runs cool-to-hot
+// (light beer -> heavy hitter), Rating runs bad-to-great, Beverage-match just runs
+// gray-to-gold since "more of this specific drink" has no inherent good/bad direction.
+function getGaugeTheme(widgetType: string, percent: number): { stops: [string, string, string]; zoneColor: string } {
+  const stops: [string, string, string] =
+    widgetType === "abv-gauge"
+      ? ["#38bdf8", "#f59e0b", "#ef4444"]
+      : widgetType === "rating-gauge"
+        ? ["#ef4444", "#f59e0b", "#10b981"]
+        : ["#64748b", "#d97706", "#fbbf24"];
+  const zoneColor = percent < 34 ? stops[0] : percent < 67 ? stops[1] : stops[2];
+  return { stops, zoneColor };
+}
+
 // A plain function called once per pub in a roster/carousel can't call useRetryImage
 // itself without breaking the Rules of Hooks (each call site needs its own hook
 // instance) - this small component is that instance.
@@ -2136,9 +2152,9 @@ export default function PubHub({
             let ratingBg = "bg-amber-500/5", ratingBorder = "border-amber-500/20";
             if (data.percent < 25) { ratingBg = "bg-rose-500/5"; ratingBorder = "border-rose-500/20"; }
             else if (data.percent >= 75) { ratingBg = "bg-emerald-500/5"; ratingBorder = "border-emerald-500/20"; }
-            const gGold = `pubGoldGrad-${widget.id}`;
-            const gGauge = `pubGaugeGrad-${widget.id}`;
-            const gRim = `pubRimGrad-${widget.id}`;
+            const gTrack = `pubTrackGrad-${widget.id}`;
+            const gGlow = `pubGlow-${widget.id}`;
+            const gauge = getGaugeTheme(widget.type, data.percent);
 
             return (
               <div key={widget.id} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs p-4 sm:p-5 space-y-4">
@@ -2153,40 +2169,56 @@ export default function PubHub({
                       <div className="w-full max-w-[240px] aspect-[1.8/1] relative flex items-center justify-center">
                         <svg className="w-full h-full overflow-visible" viewBox="0 0 200 120">
                           <defs>
-                            <linearGradient id={gGold} x1="0%" y1="0%" x2="100%" y2="100%">
-                              <stop offset="0%" stopColor="#C5A059" />
-                              <stop offset="50%" stopColor="#E2C58F" />
-                              <stop offset="100%" stopColor="#8A662D" />
+                            <linearGradient id={gTrack} x1="0%" y1="0%" x2="100%" y2="0%">
+                              <stop offset="0%" stopColor={gauge.stops[0]} />
+                              <stop offset="50%" stopColor={gauge.stops[1]} />
+                              <stop offset="100%" stopColor={gauge.stops[2]} />
                             </linearGradient>
-                            <linearGradient id={gGauge} x1="0%" y1="0%" x2="100%" y2="0%">
-                              <stop offset="0%" stopColor="#7E7770" />
-                              <stop offset="45%" stopColor="#4A4139" />
-                              <stop offset="75%" stopColor="#1E1B18" />
-                              <stop offset="100%" stopColor="#0B0908" />
-                            </linearGradient>
-                            <linearGradient id={gRim} x1="0%" y1="0%" x2="100%" y2="0%">
-                              <stop offset="0%" stopColor="#94A3B8" />
-                              <stop offset="50%" stopColor="#D97706" />
-                              <stop offset="100%" stopColor="#FBBF24" />
-                            </linearGradient>
+                            <filter id={gGlow} x="-60%" y="-60%" width="220%" height="220%">
+                              <feGaussianBlur stdDeviation="3.2" result="blur" />
+                              <feMerge>
+                                <feMergeNode in="blur" />
+                                <feMergeNode in="SourceGraphic" />
+                              </feMerge>
+                            </filter>
                           </defs>
 
-                          <path d="M 30,100 A 70,70 0 0,1 170,100" fill="none" stroke="#f1f5f9" strokeWidth="11" strokeLinecap="round" />
-                          <path d="M 30,100 A 70,70 0 0,1 170,100" fill="none" stroke={`url(#${gGauge})`} strokeWidth="11" strokeLinecap="round" />
-                          <path d="M 24,100 A 76,76 0 0,1 176,100" fill="none" stroke={`url(#${gRim})`} strokeWidth="1.5" strokeLinecap="round" opacity="0.9" />
+                          {/* Background track */}
+                          <path d="M 30,100 A 70,70 0 0,1 170,100" fill="none" stroke="currentColor" className="text-slate-100 dark:text-slate-800" strokeWidth="14" strokeLinecap="round" />
+                          {/* Full-scale colored gradient (what "good" looks like at a glance) */}
+                          <path d="M 30,100 A 70,70 0 0,1 170,100" fill="none" stroke={`url(#${gTrack})`} strokeWidth="11" strokeLinecap="round" opacity="0.9" filter={`url(#${gGlow})`} />
 
-                          <g>
-                            <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="#C5A059" strokeWidth="3.5" strokeLinecap="round" />
-                            <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="#1E1B18" strokeWidth="1" strokeLinecap="round" />
-                            <circle cx={cx} cy={cy} r="8" fill={`url(#${gGold})`} />
-                            <circle cx={cx} cy={cy} r="4" fill="#1E1B18" />
-                            <circle cx={cx} cy={cy} r="1.5" fill="#FDFBF7" />
+                          {/* Tick marks for an instrument-panel feel */}
+                          {Array.from({ length: 9 }).map((_, i) => {
+                            const tAngle = (i / 8) * 180;
+                            const tRad = (tAngle * Math.PI) / 180;
+                            const rOuter = 84, rInner = i % 2 === 0 ? 74 : 78;
+                            const x1 = cx - rOuter * Math.cos(tRad), y1 = cy - rOuter * Math.sin(tRad);
+                            const x2 = cx - rInner * Math.cos(tRad), y2 = cy - rInner * Math.sin(tRad);
+                            return (
+                              <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="currentColor" className="text-slate-300 dark:text-slate-600" strokeWidth={i % 2 === 0 ? 2 : 1} strokeLinecap="round" />
+                            );
+                          })}
+
+                          {/* Needle, glowing in the current zone's color */}
+                          <g filter={`url(#${gGlow})`}>
+                            <line x1={cx} y1={cy} x2={nx} y2={ny} stroke={gauge.zoneColor} strokeWidth="3.5" strokeLinecap="round" />
+                            <circle cx={cx} cy={cy} r="9" fill={gauge.zoneColor} />
+                            <circle cx={cx} cy={cy} r="9" fill="none" stroke="#0b0f19" strokeWidth="1.5" />
+                            <circle cx={cx} cy={cy} r="3" fill="#0b0f19" />
                           </g>
 
                           <text x="21" y="118" textAnchor="middle" className="text-[9px] font-extrabold fill-slate-400 uppercase">0%</text>
                           <text x="179" y="118" textAnchor="middle" className="text-[9px] font-extrabold fill-slate-400 uppercase">100%</text>
-                          <text x="100" y="15" textAnchor="middle" fill={`url(#${gGold})`} className="text-[20px] font-black font-mono tracking-tight">{data.bigNumber}</text>
                         </svg>
+
+                        {/* Big number readout - a colored chip rather than plain floating text */}
+                        <div
+                          className="absolute -top-1 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full font-black font-mono text-lg tracking-tight text-white shadow-lg"
+                          style={{ backgroundColor: gauge.zoneColor, boxShadow: `0 0 14px ${gauge.zoneColor}80` }}
+                        >
+                          {data.bigNumber}
+                        </div>
                       </div>
 
                       {/* Rating review banner */}
