@@ -7,7 +7,7 @@ import { BeerLog, UserProfile, AppNotification, Pub, PubChatMessage, ContentRepo
 import { normalizeBeerName } from "./src/data/beerCatalog";
 import { isImposterLog } from "./src/utils";
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, orderBy, where, writeBatch, limit, onSnapshot, runTransaction } from "firebase/firestore";
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, orderBy, where, writeBatch, limit, onSnapshot, runTransaction } from "firebase/firestore";
 import { getStorage, ref, uploadString, getDownloadURL } from "firebase/storage";
 import { initializeApp as initializeAdminApp, getApps as getAdminApps, applicationDefault, cert } from "firebase-admin/app";
 import { getMessaging } from "firebase-admin/messaging";
@@ -1338,11 +1338,20 @@ async function recalculateAndCacheUserStats(username: string): Promise<any> {
   };
 
   if (existingUser) {
-    const updatedProfile = {
-      ...existingUser,
-      stats: calculatedStats
-    };
-    await saveUser(updatedProfile);
+    // Deliberately updateDoc, not saveUser()/setDoc: this function is often kicked
+    // off as fire-and-forget background work (e.g. after a beer log delete) and can
+    // still be running after the user account itself gets deleted moments later
+    // (their last log deleted, then the account deleted right after). setDoc would
+    // silently resurrect the just-deleted account with a fresh, zeroed-out profile;
+    // updateDoc correctly no-ops (throws, caught below) if the document is gone.
+    const firestore = getFirestoreInstance();
+    if (firestore && useFirestore) {
+      try {
+        await updateDoc(doc(firestore, "users", username.toLowerCase()), { stats: calculatedStats });
+      } catch (err) {
+        console.log(`[Stats] Skipped stats update for ${username} - account no longer exists.`);
+      }
+    }
   }
 
   return calculatedStats;
