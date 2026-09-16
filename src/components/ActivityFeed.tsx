@@ -1068,6 +1068,11 @@ export default function ActivityFeed({
               const hasCheered = log.cheers.includes(currentUser);
               const isDenied = getReactionList(log, "dislike").length >= 3;
               const isCelebrated = (log.isFirstOfDay || log.isNewStyle) && !isDenied;
+              // 3+ FOMO Alerts gets a flashing red/blue "sirens" treatment - a real
+              // moment people don't want to miss, worth calling out visually. Denied
+              // posts keep their own treatment regardless (that stamp already covers
+              // the whole card, so layering another effect underneath would be wasted).
+              const isSirenAlert = !isDenied && getReactionList(log, "fomo").length >= 3;
 
               return (
                 <motion.div
@@ -1080,9 +1085,11 @@ export default function ActivityFeed({
                   className={`bg-white dark:bg-slate-900 rounded-xl border overflow-hidden transition-all shadow-sm relative ${
                     isDenied
                       ? "border-red-600 dark:border-red-800 shadow-[inset_0_0_20px_rgba(220,38,38,0.08)] bg-red-50/5"
-                      : isCelebrated
-                        ? "border-amber-400/80 dark:border-amber-500/50 shadow-sm ring-1 ring-amber-500/20"
-                        : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
+                      : isSirenAlert
+                        ? "fomo-siren-card"
+                        : isCelebrated
+                          ? "border-amber-400/80 dark:border-amber-500/50 shadow-sm ring-1 ring-amber-500/20"
+                          : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
                   }`}
                 >
                   {isDenied && (
@@ -1129,6 +1136,14 @@ export default function ActivityFeed({
                               title={`${log.user}'s first time logging a ${log.beerStyle}!`}
                             >
                               🆕 New Style
+                            </span>
+                          )}
+                          {isSirenAlert && (
+                            <span
+                              className="fomo-siren-badge text-white font-extrabold px-2 py-0.5 rounded-full text-[9px] uppercase tracking-wider inline-flex items-center gap-1 shadow-xs"
+                              title="3+ people hit FOMO Alert on this one - don't miss it!"
+                            >
+                              🚨 Sirens Blaring
                             </span>
                           )}
                         </div>
