@@ -1368,6 +1368,16 @@ async function deleteUser(username: string): Promise<boolean> {
       // deleted account.
       const allUsers = await getAllUsers();
       const departingUser = allUsers.find((u) => u.username.toLowerCase() === usernameKey);
+      // Without this check, deleting a username that doesn't actually match any
+      // stored account (wrong case, a stale reference, a client-side truncated
+      // value - e.g. the signup form's username input is capped at 15 characters,
+      // so a caller passing a longer string here silently targets a document that
+      // was never created) would still report success: deleteDoc() doesn't error
+      // on a missing document, so every step below would appear to "work" while
+      // touching nothing.
+      if (!departingUser) {
+        return false;
+      }
       for (const other of allUsers) {
         if (other.username.toLowerCase() === usernameKey) continue;
         const hadFriend = (other.friends || []).some((f) => f.toLowerCase() === usernameKey);
@@ -2972,22 +2982,25 @@ app.delete("/api/beers/:id", async (req, res) => {
 
   const log = await findBeerLogById(id);
 
-  if (log) {
-    const beerUser = log.user || "";
-    const isOwner = currentUser.toLowerCase().trim() === beerUser.toLowerCase().trim();
-    const isAdmin = isSeymoreBeers(currentUser);
-
-    if (!isOwner && !isAdmin) {
-      res.status(403).json({ error: "Unauthorized. You can only delete your own posts." });
-      return;
-    }
+  if (!log) {
+    res.status(404).json({ error: "Post not found." });
+    return;
   }
 
-  const beerUserToUpdate = log?.user;
+  const beerUser = log.user || "";
+  const isOwner = currentUser.toLowerCase().trim() === beerUser.toLowerCase().trim();
+  const isAdmin = isSeymoreBeers(currentUser);
+
+  if (!isOwner && !isAdmin) {
+    res.status(403).json({ error: "Unauthorized. You can only delete your own posts." });
+    return;
+  }
+
+  const beerUserToUpdate = log.user;
 
   await deleteBeerLog(id);
 
-  if (log?.imageUrl) {
+  if (log.imageUrl) {
     deleteStorageObjectForImageUrl(log.imageUrl).catch((e) =>
       console.warn("Error deleting Storage object after post delete:", e)
     );
