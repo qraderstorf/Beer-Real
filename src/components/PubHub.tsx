@@ -814,10 +814,10 @@ export default function PubHub({
     const weeks: { date: Date; count: number }[][] = [];
     for (let w = 0; w < numWeeks; w++) weeks.push(dayBuckets.slice(w * 7, w * 7 + 7));
     const ratingText =
-      totalDarts === 0 ? "😇 Clean lungs, clean pours. No darts logged." :
-      dartPercent < 15 ? "🚬 The occasional cheeky dart with a pint." :
+      totalDarts === 0 ? "😇 No darts logged. Clean pours all around." :
+      dartPercent < 15 ? "🎯 The occasional cheeky dart with a pint." :
       dartPercent < 35 ? "🎯 Dart Combo is a lifestyle around here." :
-      "🔥 Practically a smoking section with a bar attached.";
+      "🔥 Dart Combos are basically the house special.";
     return { weeks, totalDarts, total, dartPercent, maxCount, ratingText };
   };
 
