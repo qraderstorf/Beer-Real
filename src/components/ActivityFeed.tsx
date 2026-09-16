@@ -274,8 +274,11 @@ const CUSTOM_EMOJIS: { emoji: string; label: string; theme: ReactionTheme }[] = 
   // Not cosmetically special, but real usage data shows this as by far the most-used
   // custom reaction on real posts (well ahead of everything else in this list) - it's
   // pinned first so the picker doesn't bury what people already reach for most.
-  // ("Drunk" 🥴 has similar historical usage but is deliberately left out - not a
-  // vibe worth encouraging on a platform centered around drinking.)
+  // A few reactions that are really just slang for "very drunk" ("Drunk" 🥴, "Sunk"
+  // ⚓, "Twisted" 🥨) are deliberately left out even where they have real historical
+  // usage - not a vibe worth encouraging on a platform centered around drinking.
+  // "Stiff" 🥃 stays - it describes the drink's strength, not the drinker's state,
+  // same category as "Creamy".
   { emoji: "🍑", label: "Juicy", theme: "rose" },
   { emoji: "🍺", label: "Creamy", theme: "amber" },
   { emoji: "🍻", label: "Cheers", theme: "amber" },
@@ -298,7 +301,6 @@ const CUSTOM_EMOJIS: { emoji: string; label: string; theme: ReactionTheme }[] = 
   { emoji: "🍹", label: "Fruity", theme: "sky" },
   { emoji: "🚀", label: "Sent", theme: "sky" },
   { emoji: "😎", label: "Smooth", theme: "sky" },
-  { emoji: "⚓", label: "Sunk", theme: "sky" },
   { emoji: "👍", label: "Solid", theme: "emerald" },
   { emoji: "💯", label: "Elite", theme: "emerald" },
   { emoji: "👏", label: "Respect", theme: "emerald" },
@@ -309,7 +311,6 @@ const CUSTOM_EMOJIS: { emoji: string; label: string; theme: ReactionTheme }[] = 
   { emoji: "🍕", label: "SoberUp", theme: "slate" },
   { emoji: "🍔", label: "PubGrub", theme: "slate" },
   { emoji: "🍟", label: "Chips", theme: "slate" },
-  { emoji: "🥨", label: "Twisted", theme: "slate" },
   { emoji: "🥓", label: "Crispy", theme: "slate" },
   { emoji: "🌙", label: "Night night", theme: "indigo" },
   { emoji: "🤔", label: "Dodgy", theme: "indigo" },
@@ -1349,7 +1350,7 @@ export default function ActivityFeed({
                           {/* Pre-labeled buttons & Custom emoji reactions & Plus selector - only reactions someone has
                               actually used get a pill, so the row stays compact instead of wrapping/scrolling. The "+"
                               button is always visible and is the one discovery point for every reaction type, used or not. */}
-                          <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                          <div className="flex flex-wrap items-center gap-1 min-w-0">
                             {/* Preset Buttons - hidden until at least one person has used them, except
                                 FOMO Alert which stays visible always: otherwise nobody could ever be the
                                 first to use it since the button that starts it off would never appear. */}
@@ -1367,16 +1368,16 @@ export default function ActivityFeed({
                                       e.stopPropagation();
                                       handleReact(log.id, react.key);
                                     }}
-                                    className={`flex items-center gap-1.5 py-1 px-2.5 rounded-full text-[10px] font-extrabold border transition-all duration-150 active:scale-95 hover:scale-105 cursor-pointer select-none ${
+                                    className={`flex items-center gap-1 py-0.5 px-2 rounded-full text-[9px] font-extrabold border transition-all duration-150 active:scale-95 hover:scale-105 cursor-pointer select-none ${
                                       hasReacted
                                         ? `${react.activeClass} font-black`
                                         : react.unselectedClass
                                     }`}
                                   >
-                                    <span className="text-[12px]">{react.emoji}</span>
-                                    <span className="text-[10px] font-bold">{react.label}</span>
+                                    <span className="text-[11px]">{react.emoji}</span>
+                                    <span className="text-[9px] font-bold">{react.label}</span>
                                     {count > 0 && (
-                                      <span className={`ml-0.5 px-1.5 py-0.2 rounded-full text-[9px] font-black ${
+                                      <span className={`ml-0.5 px-1 py-0.5 rounded-full text-[8px] font-black leading-none ${
                                         hasReacted ? "bg-black/25 text-white" : "bg-black/10 dark:bg-white/10 text-current"
                                       }`}>
                                         {count}
@@ -1418,13 +1419,13 @@ export default function ActivityFeed({
                                       e.stopPropagation();
                                       handleReact(log.id, key);
                                     }}
-                                    className={`flex items-center gap-1.5 py-1 px-2.5 rounded-full text-[10px] font-extrabold border transition-all duration-150 active:scale-95 hover:scale-105 cursor-pointer select-none ${
+                                    className={`flex items-center gap-1 py-0.5 px-2 rounded-full text-[9px] font-extrabold border transition-all duration-150 active:scale-95 hover:scale-105 cursor-pointer select-none ${
                                       hasReacted ? `${theme.active} font-black` : theme.unselected
                                     }`}
                                   >
-                                    <span className="text-[12px]">{emoji}</span>
-                                    <span className="text-[10px] font-bold">{label}</span>
-                                    <span className={`ml-0.5 px-1.5 py-0.2 rounded-full text-[9px] font-black ${
+                                    <span className="text-[11px]">{emoji}</span>
+                                    <span className="text-[9px] font-bold">{label}</span>
+                                    <span className={`ml-0.5 px-1 py-0.5 rounded-full text-[8px] font-black leading-none ${
                                       hasReacted ? "bg-black/25 text-white" : "bg-black/10 dark:bg-white/10 text-current"
                                     }`}>
                                       {list.length}
@@ -1465,14 +1466,14 @@ export default function ActivityFeed({
                                 onTouchStart={(e) => {
                                   e.stopPropagation();
                                 }}
-                                className={`flex items-center justify-center w-6 h-6 sm:w-6.5 sm:h-6.5 rounded-full border transition-all cursor-pointer ${
+                                className={`flex items-center justify-center w-5 h-5 rounded-full border transition-all cursor-pointer ${
                                   activeCustomEmojiPicker?.logId === log.id
                                     ? "bg-amber-500 border-amber-500 text-white"
                                     : "border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-amber-500"
                                 }`}
                                 title="Add custom emoji reaction"
                               >
-                                <Plus className="w-3.5 h-3.5" />
+                                <Plus className="w-3 h-3" />
                               </button>
 
                               {activeCustomEmojiPicker?.logId === log.id && (
