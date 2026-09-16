@@ -19,7 +19,7 @@ const SLIDES: Slide[] = [
     icon: <Users className="w-6 h-6 text-amber-600" />,
     iconBg: "bg-amber-50 border-amber-100",
     title: "Welcome to BeerReal 🍻",
-    body: "BeerReal is built around community - your mates, your pints, your online local pub. Log every pour, cheers your crew, and stay connected with your community near and far, one creamy pint at a time.",
+    body: "BeerReal is built around community - your mates, your pints, your online local pub. Beer, cider, tea, or water in hand, log every pour, cheers your crew, and stay connected with your community, near and far.",
   },
   {
     icon: <Camera className="w-6 h-6 text-sky-600" />,
