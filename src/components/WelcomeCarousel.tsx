@@ -10,6 +10,7 @@ interface WelcomeCarouselProps {
 interface Slide {
   icon: React.ReactNode;
   iconBg: string;
+  image?: string;
   title: string;
   body: string;
 }
@@ -24,18 +25,21 @@ const SLIDES: Slide[] = [
   {
     icon: <Camera className="w-6 h-6 text-sky-600" />,
     iconBg: "bg-sky-50 border-sky-100",
+    image: "/onboarding/log-pint.png",
     title: "Log Every Pint",
     body: "Snap a photo, rate it, and share what's in your glass. Every check-in lands in the Live Feed, giving your mates a tasty pint of FOMO - especially when the crew's all together and they're not.",
   },
   {
     icon: <Siren className="w-6 h-6 text-rose-600" />,
     iconBg: "bg-rose-50 border-rose-100",
+    image: "/onboarding/react-rally.png",
     title: "React & Rally",
     body: "React with dozens of custom emojis, blast FOMO Alert on the pints worth chasing, and slap Imposter Pint on the ones that definitely aren't pints.",
   },
   {
     icon: <Landmark className="w-6 h-6 text-emerald-600" />,
     iconBg: "bg-emerald-50 border-emerald-100",
+    image: "/onboarding/pub-hub.png",
     title: "Light the Beacons 🔥",
     body: "Open your own pub for your crew, make it yours with custom stats and vibes, and light the beacons when it's time to rally everyone to the bar.",
   },
@@ -83,9 +87,19 @@ export default function WelcomeCarousel({ onDone }: WelcomeCarouselProps) {
               exit={{ opacity: 0, x: -16 }}
               transition={{ duration: 0.2 }}
             >
-              <div className={`w-14 h-14 mx-auto rounded-2xl border flex items-center justify-center mb-4 ${slide.iconBg}`}>
-                {slide.icon}
-              </div>
+              {slide.image ? (
+                <div className="bg-slate-100 rounded-2xl p-2 shadow-inner border border-slate-200 mb-4">
+                  <img
+                    src={slide.image}
+                    alt={slide.title}
+                    className="mx-auto max-h-[220px] w-auto rounded-xl shadow-md object-contain"
+                  />
+                </div>
+              ) : (
+                <div className={`w-14 h-14 mx-auto rounded-2xl border flex items-center justify-center mb-4 ${slide.iconBg}`}>
+                  {slide.icon}
+                </div>
+              )}
               <h2 className="text-base font-black text-slate-800 tracking-tight">{slide.title}</h2>
               <p className="mt-2 text-xs text-slate-500 font-medium leading-relaxed min-h-[70px]">
                 {slide.body}
