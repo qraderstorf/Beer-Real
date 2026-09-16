@@ -36,8 +36,8 @@ const SLIDES: Slide[] = [
   {
     icon: <Landmark className="w-6 h-6 text-emerald-600" />,
     iconBg: "bg-emerald-50 border-emerald-100",
-    title: "Meet Your Pub Hub",
-    body: "Pub Hub is your crew's home base - group chat, fun stats like \"Is it a Guinness?\", and leaderboards for your regulars. Create one or join a friend's.",
+    title: "Light the Beacons 🔥",
+    body: "Open your own pub for your crew, make it yours with custom stats and vibes, and light the beacons when it's time to rally everyone to the bar.",
   },
 ];
 
