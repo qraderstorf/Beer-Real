@@ -16,7 +16,7 @@ export default function AgeGate({ onVerified }: AgeGateProps) {
         <div className="sm:mx-auto sm:w-full sm:max-w-md bg-white py-8 px-6 shadow-sm border border-slate-200 rounded-2xl">
           <h2 className="text-lg font-black text-slate-800 tracking-tight">You must be of legal drinking age</h2>
           <p className="mt-2 text-sm text-slate-500 font-medium leading-relaxed">
-            BeerReal is a social app for tracking and sharing beer, and isn't available to anyone
+            BeerReel is a social app for tracking and sharing beer, and isn't available to anyone
             under the legal drinking age in their location.
           </p>
         </div>
@@ -38,7 +38,7 @@ export default function AgeGate({ onVerified }: AgeGateProps) {
           </div>
           <h2 className="text-base font-black text-slate-800 tracking-tight">Age Verification</h2>
           <p className="mt-2 text-xs text-slate-500 font-medium leading-relaxed">
-            BeerReal involves content about alcohol. You must be 21 or older, or the legal
+            BeerReel involves content about alcohol. You must be 21 or older, or the legal
             drinking age in your location, to use this app.
           </p>
 

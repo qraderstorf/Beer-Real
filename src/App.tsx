@@ -1512,7 +1512,7 @@ export default function App() {
           <div className="p-2 bg-amber-500 text-white rounded-xl text-lg font-black shrink-0">🍻</div>
           <div className="flex-1">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-black text-amber-400 uppercase tracking-wider">BeerReal Alert</span>
+              <span className="text-xs font-black text-amber-400 uppercase tracking-wider">BeerReel Alert</span>
               <button onClick={() => setActiveToast(null)} className="text-slate-400 hover:text-white text-xs font-bold p-1">✕</button>
             </div>
             <p className="text-xs font-semibold text-slate-100 mt-1">{activeToast.text}</p>

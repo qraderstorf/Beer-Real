@@ -329,7 +329,7 @@ app.get("/api/debug-storage", async (req, res) => {
   } catch (e) {}
 
   const testFilename = `debug/storage-test-${Date.now()}.txt`;
-  const testContent = "beer-real storage diagnostic write";
+  const testContent = "beerreel storage diagnostic write";
 
   if (getAdminApps().length > 0) {
     report.adminSdk.attempted = true;
@@ -392,7 +392,7 @@ const DEFAULT_USERS: UserProfile[] = [
     avatar: "🍻",
     bio: "Love dry-hopped double IPAs. Drinking in moderation... usually.",
     password: "Pints!",
-    email: "quin@beerreal.com"
+    email: "quin@beerreel.com"
   },
   {
     username: "Sam",
@@ -401,7 +401,7 @@ const DEFAULT_USERS: UserProfile[] = [
     avatar: "☕",
     bio: "Stout season is all year round. The darker, the better.",
     password: "Pints!",
-    email: "sam@beerreal.com"
+    email: "sam@beerreel.com"
   },
   {
     username: "Alex",
@@ -410,7 +410,7 @@ const DEFAULT_USERS: UserProfile[] = [
     avatar: "🍋",
     bio: "Sour and wild fermentation enthusiast. Can't resist a good Gose.",
     password: "Pints!",
-    email: "alex@beerreal.com"
+    email: "alex@beerreel.com"
   },
   {
     username: "Taylor",
@@ -419,7 +419,7 @@ const DEFAULT_USERS: UserProfile[] = [
     avatar: "🍺",
     bio: "Keep it crispy. Dedicated lager and craft pilsner fan.",
     password: "Pints!",
-    email: "taylor@beerreal.com"
+    email: "taylor@beerreel.com"
   },
   {
     username: "Jordan",
@@ -428,7 +428,7 @@ const DEFAULT_USERS: UserProfile[] = [
     avatar: "🍊",
     bio: "Juicy, tropical hazy IPAs are life. Citra & Mosaic hops please!",
     password: "Pints!",
-    email: "jordan@beerreal.com"
+    email: "jordan@beerreel.com"
   }
 ];
 
@@ -2638,7 +2638,7 @@ app.post("/api/send-test-push", async (req, res) => {
   try {
     await sendFCMNotification(
       user,
-      "BeerReal System 🍻",
+      "BeerReel System 🍻",
       "A cold beer is calling your name! Everything's working through background FCM push."
     );
     res.json({ success: true, message: "Test push initiated" });
@@ -3296,7 +3296,7 @@ app.post("/api/users", async (req, res) => {
       const notif: AppNotification = {
         id: "newuser-" + username + "-" + Date.now(),
         user: username,
-        text: `🎉 A new user, <strong>${escapeHtml(realName || username)}</strong>, just joined BeerReal! Give them a warm welcome! 🍻`,
+        text: `🎉 A new user, <strong>${escapeHtml(realName || username)}</strong>, just joined BeerReel! Give them a warm welcome! 🍻`,
         date: new Date().toISOString(),
         readBy: [],
         type: "post"

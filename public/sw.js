@@ -2,7 +2,7 @@ importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js'
 importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js');
 
 const BUILD_VERSION = "v20260731-1008";
-const CACHE_NAME = `beerreal-cache-${BUILD_VERSION}`;
+const CACHE_NAME = `beerreel-cache-${BUILD_VERSION}`;
 const ASSETS = [
   "/",
   "/index.html",
@@ -48,7 +48,7 @@ try {
       console.log("[PWA SW] FCM Background message received:", payload);
       const title = payload.notification?.title || payload.data?.title || "🍻 Pint Alert";
       const body = payload.notification?.body || payload.data?.body || "A cold beer was logged!";
-      const notifId = payload.data?.notificationId || payload.data?.id || payload.notification?.tag || "beerreal-notif-" + (payload.data?.timestamp || Date.now());
+      const notifId = payload.data?.notificationId || payload.data?.id || payload.notification?.tag || "beerreel-notif-" + (payload.data?.timestamp || Date.now());
       
       if (!shouldShowNotification(notifId)) {
         return;
@@ -89,7 +89,7 @@ self.addEventListener("activate", (event) => {
     caches.keys().then((keys) => {
       return Promise.all(
         keys.map((key) => {
-          if (key !== CACHE_NAME && key.startsWith("beerreal-cache-")) {
+          if (key !== CACHE_NAME && key.startsWith("beerreel-cache-")) {
             console.log("[PWA SW] Invalidating old cache version:", key);
             return caches.delete(key);
           }
@@ -195,7 +195,7 @@ self.addEventListener("message", (event) => {
           icon: "/icon-192.png",
           badge: "/icon-192.png",
           vibrate: [100, 50, 100],
-          tag: "beerreal-notification",
+          tag: "beerreel-notification",
           renotify: true,
           ...options
         })
@@ -211,7 +211,7 @@ self.addEventListener("push", (event) => {
     try {
       data = event.data.json();
     } catch (e) {
-      data = { title: "BeerReal Alert! 🍻", body: event.data.text() };
+      data = { title: "BeerReel Alert! 🍻", body: event.data.text() };
     }
   }
 
@@ -227,7 +227,7 @@ self.addEventListener("push", (event) => {
 
   const title = notifObj.title || dataObj.title || data.title || "🍻 Pint Alert";
   const body = notifObj.body || dataObj.body || data.body || "A cold beer is calling your name! 🍻";
-  const notifId = dataObj.notificationId || dataObj.id || data.tag || "beerreal-notif-static";
+  const notifId = dataObj.notificationId || dataObj.id || data.tag || "beerreel-notif-static";
 
   if (!shouldShowNotification(notifId)) {
     return;

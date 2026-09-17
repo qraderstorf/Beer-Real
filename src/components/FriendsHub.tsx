@@ -449,7 +449,7 @@ export default function FriendsHub({
             onClick={onClose}
             className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
           >
-            {myFriends.length > 0 ? "Continue to BeerReal 🍻" : "Skip for now"}
+            {myFriends.length > 0 ? "Continue to BeerReel 🍻" : "Skip for now"}
           </button>
         </div>
       )}

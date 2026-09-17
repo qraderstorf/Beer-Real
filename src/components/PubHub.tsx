@@ -2390,7 +2390,7 @@ export default function PubHub({
                         );
                       })}
                       {otherUsers.length === 0 && (
-                        <p className="text-center text-[10px] text-slate-500 py-4 font-semibold">No other pub companions registered on BeerReal yet.</p>
+                        <p className="text-center text-[10px] text-slate-500 py-4 font-semibold">No other pub companions registered on BeerReel yet.</p>
                       )}
                     </div>
                   </div>

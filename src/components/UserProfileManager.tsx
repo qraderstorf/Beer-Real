@@ -1180,7 +1180,7 @@ export default function UserProfileManager({
                       <input
                         id="my-email-input"
                         type="email"
-                        placeholder="quin@beerreal.com"
+                        placeholder="quin@beerreel.com"
                         value={myEmail}
                         onChange={(e) => setMyEmail(e.target.value)}
                         className="w-full px-3 py-2 border border-slate-200 bg-white rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-800 transition-all"
