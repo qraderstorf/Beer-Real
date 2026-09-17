@@ -272,31 +272,48 @@ body {
   background-color: rgba(32, 43, 66, 0.5) !important;
 }
 
-/* Police-siren treatment for a post that's picked up 3+ FOMO Alert reactions - a hard
-   red/blue cut (steps, not a smooth blend) on the card border/glow so it actually reads
-   as flashing lights, plus a little wobble on the badge that announces it. */
-@keyframes siren-border-flash {
-  0%, 49.9% {
-    border-color: #ef4444;
-    box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.45), 0 0 18px rgba(239, 68, 68, 0.35);
+/* Treatment for a post that's picked up 3+ FOMO Alert reactions - the whole card
+   gives a woozy little drift and blur, like it's too good to sit still, with a
+   warm amber/rose glow that pulses instead of a hard flash. Badge gets a matching
+   shimmer to call it out. */
+@keyframes fomo-alert-drift {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+    filter: blur(0px);
+    box-shadow: 0 0 0 1px rgba(244, 63, 94, 0.35), 0 0 14px rgba(244, 63, 94, 0.25);
   }
-  50%, 100% {
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.45), 0 0 18px rgba(59, 130, 246, 0.35);
+  20% {
+    transform: translate3d(-1.5px, 1px, 0) rotate(-0.35deg);
+    filter: blur(0.6px);
+  }
+  40% {
+    transform: translate3d(1.5px, -1px, 0) rotate(0.3deg);
+    filter: blur(0px);
+    box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.4), 0 0 18px rgba(249, 115, 22, 0.3);
+  }
+  60% {
+    transform: translate3d(-1px, -0.5px, 0) rotate(-0.25deg);
+    filter: blur(0.7px);
+  }
+  80% {
+    transform: translate3d(1px, 0.5px, 0) rotate(0.2deg);
+    filter: blur(0px);
+    box-shadow: 0 0 0 1px rgba(244, 63, 94, 0.35), 0 0 14px rgba(244, 63, 94, 0.25);
   }
 }
-.fomo-siren-card {
-  animation: siren-border-flash 1s steps(1, end) infinite;
+.fomo-alert-card {
+  animation: fomo-alert-drift 2.4s ease-in-out infinite;
+  border-color: #fb7185;
 }
 
-@keyframes siren-badge-wobble {
-  0%, 100% { transform: rotate(-6deg) scale(1); }
-  50% { transform: rotate(6deg) scale(1.1); }
+@keyframes fomo-alert-badge-shimmer {
+  0%, 100% { background-position: 0% 50%; transform: scale(1); }
+  50% { background-position: 100% 50%; transform: scale(1.06); }
 }
-.fomo-siren-badge {
-  animation: siren-badge-wobble 0.45s ease-in-out infinite;
+.fomo-alert-badge {
+  animation: fomo-alert-badge-shimmer 1.6s ease-in-out infinite;
   background-size: 200% 100%;
-  background-image: linear-gradient(90deg, #ef4444 0%, #ef4444 49%, #3b82f6 51%, #3b82f6 100%);
+  background-image: linear-gradient(90deg, #f43f5e 0%, #f97316 50%, #f43f5e 100%);
 }
 
 /* Custom highly-polished comment styles */
