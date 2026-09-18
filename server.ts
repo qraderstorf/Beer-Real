@@ -1700,6 +1700,26 @@ async function createAndDispatchNotification(options: CreateNotificationOptions)
   }
 }
 
+// Fans a "community activity" notification (first pour of the day, imposter pint
+// outed, etc.) out to friends only, one targeted record per friend - these used to
+// be dispatched as a single untargeted record, which both the client's bell filter
+// and the FCM push path treat as "show/buzz literally everyone," friend or total
+// stranger alike. Whose friends to notify defaults to options.user (the person the
+// activity is about), but can be overridden - e.g. an imposter-outed notification is
+// about the outed poster, not whoever's reaction happened to tip the vote count.
+async function notifyFriendsOfActivity(
+  options: Omit<CreateNotificationOptions, "targetUser">,
+  friendsOf: string = options.user
+): Promise<void> {
+  const allUsers = await getAllUsers();
+  const lookupLower = friendsOf.toLowerCase().trim();
+  const subject = allUsers.find((u) => u.username.toLowerCase() === lookupLower);
+  const friends = subject?.friends || [];
+  for (const friend of friends) {
+    await createAndDispatchNotification({ ...options, targetUser: friend });
+  }
+}
+
 // Helper to get all pubs
 async function getAllPubs(): Promise<Pub[]> {
   const firestore = getFirestoreInstance();
@@ -2700,7 +2720,8 @@ app.post("/api/beers", async (req, res) => {
           (l) => l.user === saved.user && l.date.split("T")[0] === checkInDateStr
         );
 
-        // 1. Only send global post notification for the FIRST beer of the day for that user
+        // 1. Only send a post notification for the FIRST beer of the day for that user -
+        // friends only, not the whole user base.
         if (userLogsToday.length === 1) {
           const notificationText = generateCreativeBeerNotificationText(
             saved.beerName,
@@ -2709,7 +2730,7 @@ app.post("/api/beers", async (req, res) => {
             userLogsToday.length
           );
 
-          await createAndDispatchNotification({
+          await notifyFriendsOfActivity({
             user: saved.user,
             text: notificationText,
             date: saved.date,
@@ -2762,7 +2783,7 @@ app.post("/api/beers", async (req, res) => {
         }
 
         if (isFirstOfDay) {
-          await createAndDispatchNotification({
+          await notifyFriendsOfActivity({
             idPrefix: "notif-first-pour",
             user: saved.user,
             text: `🌅 <strong>${escapeHtml(saved.user)}</strong> poured the first pint of the day! Who's next?`,
@@ -2940,7 +2961,8 @@ app.post("/api/beers/:id/react", async (req, res) => {
           type: "reaction",
         });
 
-        // 3. Global notification ONLY when a pint is officially outed as an imposter (reaches 3 dislike/imposter votes)
+        // 3. Notify the outed poster's friends ONLY when a pint is officially outed as an
+        // imposter (reaches 3 dislike/imposter votes) - not the whole user base.
         if (reactionType === "dislike") {
           const dislikeCount = (updated.reactions?.["dislike"]?.length || 0) + (updated.reactions?.["imposter"]?.length || 0);
           if (dislikeCount === 3) {
@@ -2948,12 +2970,12 @@ app.post("/api/beers/:id/react", async (req, res) => {
             const imposterNotifText = isGuinness
               ? `🚨 IMPOSTER PINT OUTED! 🕵️ caught <strong>${safeUpdatedUser}</strong> logging a fake pint of <strong>Guinness</strong>!`
               : `🚨 IMPOSTER PINT OUTED! 🕵️ caught <strong>${safeUpdatedUser}</strong> logging a fake pint!`;
-            await createAndDispatchNotification({
+            await notifyFriendsOfActivity({
               idPrefix: "imposter",
               user: username,
               text: imposterNotifText,
               type: "imposter",
-            });
+            }, updated.user);
           }
         }
       }
