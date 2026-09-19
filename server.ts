@@ -3293,6 +3293,18 @@ app.post("/api/users", async (req, res) => {
   // generated here, hashed at rest, and the ONLY plaintext copy is returned once below.
   const newRecoveryCode = !existingUser ? generateRecoveryCode() : undefined;
 
+  // Profile photos arrive from the client as a raw base64 data URL (the crop step never
+  // uploads it itself) and need converting to a real Storage-backed URL before they can
+  // be saved - exactly like POST /api/beers already does for post photos. Skipping this
+  // was the actual bug: sanitizeForFirestore()'s base64 safeguard only recognizes the
+  // "imageUrl"/"avatar" keys by name, so a raw base64 photoUrl slipped past it and hit
+  // the 50KB field-size safeguard instead, which silently strips it to an empty string -
+  // every profile photo upload was quietly discarded with no error ever shown.
+  let resolvedPhotoUrl = photoUrl;
+  if (typeof resolvedPhotoUrl === "string" && resolvedPhotoUrl.startsWith("data:image/")) {
+    resolvedPhotoUrl = await saveBase64ToStorage(resolvedPhotoUrl);
+  }
+
   const profile: UserProfile = {
     username,
     favoriteStyle,
@@ -3304,7 +3316,7 @@ app.post("/api/users", async (req, res) => {
       : (existingUser ? existingUser.password : hashPassword("Pints!")),
     recoveryCodeHash: newRecoveryCode ? hashPassword(newRecoveryCode) : (existingUser ? existingUser.recoveryCodeHash : undefined),
     realName: realName || (existingUser ? existingUser.realName : undefined),
-    photoUrl: photoUrl !== undefined ? photoUrl : (existingUser ? existingUser.photoUrl : undefined),
+    photoUrl: resolvedPhotoUrl !== undefined ? (resolvedPhotoUrl || undefined) : (existingUser ? existingUser.photoUrl : undefined),
     email: email !== undefined ? (email.trim() || undefined) : (existingUser ? existingUser.email : undefined),
     friends: existingUser ? (existingUser.friends || []) : [],
     friendRequests: existingUser ? (existingUser.friendRequests || []) : []

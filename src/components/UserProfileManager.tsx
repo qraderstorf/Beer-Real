@@ -391,7 +391,10 @@ export default function UserProfileManager({
           password: myNewPassword.trim() || undefined,
           realName: myRealName.trim() || undefined,
           email: myEmail.trim() || undefined,
-          photoUrl: myPhotoUrl || undefined
+          // Always send an explicit value (never omit the key) - this form always knows
+          // the intended final photo state, including "the user just cleared it," which
+          // an omitted key can't distinguish from "don't touch this field."
+          photoUrl: myPhotoUrl || ""
         }),
       });
 
