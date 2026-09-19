@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
-  Users, Plus, Trash2, LogOut, Check, Shield, AlertCircle, 
-  Sparkles, Edit2, Image, Smile, Send, UserPlus, X, 
-  Trophy, Award, Zap, Moon, Coffee, Crown, ArrowLeft, TrendingUp, 
+  Users, Plus, Trash2, LogOut, Check, Shield, AlertCircle,
+  Sparkles, Edit2, Image, Smile, Send, UserPlus, X,
+  Trophy, Award, Zap, Moon, Coffee, Crown, ArrowLeft, TrendingUp,
   Beer, Star, Calendar, ChevronRight, ChevronDown, Pin, Filter, BarChart3, LineChart as LineChartIcon,
-  MessageSquare, Flame, Settings2, Gauge, Target
+  MessageSquare, Flame, Settings2, Gauge, Target, Lock, Globe
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -294,6 +294,7 @@ export default function PubHub({
   onViewProfileRequested
 }: PubHubProps) {
   const [newPubName, setNewPubName] = useState("");
+  const [newPubIsPrivate, setNewPubIsPrivate] = useState(false);
   const [selectedInvitees, setSelectedInvitees] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -602,7 +603,8 @@ export default function PubHub({
           name: newPubName.trim(),
           emblem,
           owner: currentUser,
-          invited: selectedInvitees
+          invited: selectedInvitees,
+          isPrivate: newPubIsPrivate
         })
       });
 
@@ -614,6 +616,7 @@ export default function PubHub({
       setNewPubName("");
       setSelectedInvitees([]);
       setNewPubUrl("");
+      setNewPubIsPrivate(false);
       setShowCreateModal(false);
     } catch (err: any) {
       setError(err.message || "An error occurred while establishing pub.");
@@ -632,10 +635,35 @@ export default function PubHub({
         body: JSON.stringify({ user: currentUser })
       });
 
-      if (!response.ok) throw new Error("Could not join pub.");
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || "Could not join pub.");
+      }
       const updatedPub: Pub = await response.json();
       onPubUpdated(updatedPub);
       setSuccess(`Joined "${updatedPub.name}"!`);
+    } catch (err: any) {
+      setError(err.message || "An error occurred.");
+    }
+  };
+
+  const handleTogglePubPrivacy = async (pubId: string, nextIsPrivate: boolean) => {
+    setError(null);
+    setSuccess(null);
+    try {
+      const response = await fetch(`/api/pubs/${pubId}/privacy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentUser, isPrivate: nextIsPrivate })
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || "Could not update the Pub's privacy setting.");
+      }
+      const updatedPub: Pub = await response.json();
+      onPubUpdated(updatedPub);
+      setSuccess(nextIsPrivate ? "Pub is now private - invite only." : "Pub is now public - anyone can join.");
     } catch (err: any) {
       setError(err.message || "An error occurred.");
     }
@@ -1621,8 +1649,11 @@ export default function PubHub({
               {activePub ? <PubEmblem emblem={activePub.emblem} sizeClass="w-7 h-7 text-lg" /> : <span className="shrink-0 text-lg">🍻</span>}
             </div>
             <div className="min-w-0">
-              <h1 className="text-sm sm:text-base font-black text-slate-900 dark:text-white leading-tight truncate">
-                {activePub ? activePub.name : "No Pub Selected"}
+              <h1 className="text-sm sm:text-base font-black text-slate-900 dark:text-white leading-tight flex items-center gap-1.5 min-w-0">
+                <span className="truncate">{activePub ? activePub.name : "No Pub Selected"}</span>
+                {activePub?.isPrivate && (
+                  <Lock className="w-3 h-3 text-slate-400 shrink-0" title="Private - invite only" />
+                )}
               </h1>
               <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">
                 Host: @{activePub?.owner || "System"} • <span className="font-bold text-amber-500">{activePubFilteredLogs.length} Pints</span>
@@ -1632,12 +1663,21 @@ export default function PubHub({
 
           <div className="flex items-center gap-1.5 shrink-0">
             {activePub && !activePub.members.includes(currentUser) ? (
-              <button
-                onClick={() => handleJoinPub(activePub.id)}
-                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-xs flex items-center gap-1 shrink-0"
-              >
-                <UserPlus className="w-3.5 h-3.5" /> Join
-              </button>
+              activePub.isPrivate && !myInvites.some((p) => p.id === activePub.id) ? (
+                <span
+                  title="This Pub is private - you need an invite from the owner to join."
+                  className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 font-black text-[11px] uppercase tracking-wider rounded-xl flex items-center gap-1 shrink-0 cursor-not-allowed"
+                >
+                  <Lock className="w-3.5 h-3.5" /> Invite Only
+                </span>
+              ) : (
+                <button
+                  onClick={() => handleJoinPub(activePub.id)}
+                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-xs flex items-center gap-1 shrink-0"
+                >
+                  <UserPlus className="w-3.5 h-3.5" /> Join
+                </button>
+              )
             ) : (
               <>
                 {onPinPub && activePub && (
@@ -1673,6 +1713,17 @@ export default function PubHub({
                       <UserPlus className="w-3.5 h-3.5" />
                     </button>
                     <button
+                      onClick={() => handleTogglePubPrivacy(activePub.id, !activePub.isPrivate)}
+                      title={activePub.isPrivate ? "Private - only invited people can join. Click to make public." : "Public - anyone can join. Click to make invite-only."}
+                      className={`p-1.5 rounded-xl transition-all cursor-pointer w-[32px] h-[32px] flex items-center justify-center ${
+                        activePub.isPrivate
+                          ? "bg-rose-500/10 text-rose-500 hover:bg-rose-500/20"
+                          : "bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-300"
+                      }`}
+                    >
+                      {activePub.isPrivate ? <Lock className="w-3.5 h-3.5" /> : <Globe className="w-3.5 h-3.5" />}
+                    </button>
+                    <button
                       onClick={() => startEditing(activePub)}
                       className="p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-300 rounded-xl transition-all cursor-pointer w-[32px] h-[32px] flex items-center justify-center"
                       title="Edit Pub"
@@ -1706,8 +1757,9 @@ export default function PubHub({
                   key={p.id}
                   type="button"
                   onClick={() => handleSelectPub(p.id)}
-                  className="shrink-0 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-full text-slate-600 dark:text-slate-300 font-bold hover:border-amber-400 transition-all cursor-pointer"
+                  className="shrink-0 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-full text-slate-600 dark:text-slate-300 font-bold hover:border-amber-400 transition-all cursor-pointer flex items-center gap-1"
                 >
+                  {p.isPrivate && <Lock className="w-2.5 h-2.5 text-slate-400 shrink-0" />}
                   {p.name} <span className="text-slate-400">({p.members.length})</span>
                 </button>
               ))}
@@ -2364,6 +2416,41 @@ export default function PubHub({
                         <p className="text-[9px] text-slate-400 mt-1">Provide a direct web image path/link to set as your custom pub emblem.</p>
                       </div>
                     )}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
+                      Who Can Join
+                    </label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setNewPubIsPrivate(false)}
+                        className={`flex-1 py-1.5 px-2.5 text-[10px] font-black uppercase tracking-wider rounded-xl border flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                          !newPubIsPrivate
+                            ? "bg-amber-500/20 border-amber-500 text-amber-400 font-extrabold"
+                            : "bg-slate-950 border-slate-800 text-slate-500"
+                        }`}
+                      >
+                        <Globe className="w-3.5 h-3.5" /> Public
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewPubIsPrivate(true)}
+                        className={`flex-1 py-1.5 px-2.5 text-[10px] font-black uppercase tracking-wider rounded-xl border flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                          newPubIsPrivate
+                            ? "bg-amber-500/20 border-amber-500 text-amber-400 font-extrabold"
+                            : "bg-slate-950 border-slate-800 text-slate-500"
+                        }`}
+                      >
+                        <Lock className="w-3.5 h-3.5" /> Private
+                      </button>
+                    </div>
+                    <p className="text-[9px] text-slate-400 mt-1">
+                      {newPubIsPrivate
+                        ? "Private - only people you invite can join."
+                        : "Public - anyone can find and join this Pub."}
+                    </p>
                   </div>
 
                   <div>

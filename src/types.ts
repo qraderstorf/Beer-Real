@@ -91,6 +91,7 @@ export interface Pub {
   invited: string[];
   emblem?: string;
   widgets?: PubWidgetConfig[]; // customizable Awards-tab gauge widgets; undefined = default Guinness gauge
+  isPrivate?: boolean; // undefined/false = public (anyone can join); true = invite-only
 }
 
 export interface PubChatMessage {

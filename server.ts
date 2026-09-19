@@ -3907,7 +3907,7 @@ app.post("/api/pubs/:id/messages", async (req, res) => {
 
 // POST Create or Update Pub
 app.post("/api/pubs", async (req, res) => {
-  const { id, name, owner, members, invited, emblem } = req.body;
+  const { id, name, owner, members, invited, emblem, isPrivate } = req.body;
 
   if (!name || !owner) {
     res.status(400).json({ error: "Pub name and owner are required." });
@@ -3921,7 +3921,8 @@ app.post("/api/pubs", async (req, res) => {
     owner,
     members: members || [owner],
     invited: invited || [],
-    emblem: emblem || ""
+    emblem: emblem || "",
+    isPrivate: !!isPrivate
   };
 
   const saved = await savePub(pub);
@@ -3960,8 +3961,18 @@ app.post("/api/pubs/:id/join", async (req, res) => {
     return;
   }
 
+  const usernameLower = username.toLowerCase().trim();
+  const isAlreadyMember = pub.members.some((m) => m.toLowerCase().trim() === usernameLower);
+  const isInvited = (pub.invited || []).some((u) => u.toLowerCase().trim() === usernameLower);
+
+  // Private pubs can't be joined by just knowing the ID - an actual invite is required.
+  if (pub.isPrivate && !isAlreadyMember && !isInvited) {
+    res.status(403).json({ error: "This Pub is private - you need an invite from the owner to join." });
+    return;
+  }
+
   // Add to members if not already
-  if (!pub.members.includes(username)) {
+  if (!isAlreadyMember) {
     pub.members.push(username);
   }
 
@@ -4079,6 +4090,35 @@ app.post("/api/pubs/:id/widgets", async (req, res) => {
   }
 
   pub.widgets = cleanWidgets;
+  const saved = await savePub(pub);
+  res.json(saved);
+});
+
+// POST Update Pub Privacy - owner only, since this controls who can get in
+app.post("/api/pubs/:id/privacy", async (req, res) => {
+  const { id } = req.params;
+  const currentUser = (req.body.currentUser || "").toString().trim();
+  const isPrivate = !!req.body.isPrivate;
+
+  if (!currentUser) {
+    res.status(400).json({ error: "currentUser is required." });
+    return;
+  }
+
+  const allPubsList = await getAllPubs();
+  const pub = allPubsList.find((p) => p.id === id);
+  if (!pub) {
+    res.status(404).json({ error: "Pub not found" });
+    return;
+  }
+
+  const isOwner = pub.owner.toLowerCase().trim() === currentUser.toLowerCase().trim();
+  if (!isOwner && !isSeymoreBeers(currentUser)) {
+    res.status(403).json({ error: "Only the Pub's owner can change its privacy setting." });
+    return;
+  }
+
+  pub.isPrivate = isPrivate;
   const saved = await savePub(pub);
   res.json(saved);
 });
