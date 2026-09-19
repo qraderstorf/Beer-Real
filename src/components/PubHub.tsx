@@ -562,15 +562,18 @@ export default function PubHub({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "update",
-          pubId,
+          id: pubId,
           name: editPubName.trim(),
           emblem,
-          user: currentUser
+          owner: currentPub.owner,
+          currentUser
         })
       });
 
-      if (!response.ok) throw new Error("Could not update pub details.");
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || "Could not update pub details.");
+      }
       const updatedPub: Pub = await response.json();
       onPubUpdated(updatedPub);
       setSuccess("Pub updated successfully!");
@@ -642,6 +645,28 @@ export default function PubHub({
       const updatedPub: Pub = await response.json();
       onPubUpdated(updatedPub);
       setSuccess(`Joined "${updatedPub.name}"!`);
+    } catch (err: any) {
+      setError(err.message || "An error occurred.");
+    }
+  };
+
+  const handleDeclinePubInvite = async (pubId: string) => {
+    setError(null);
+    setSuccess(null);
+    try {
+      const response = await fetch(`/api/pubs/${pubId}/decline`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user: currentUser })
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || "Could not decline invite.");
+      }
+      const updatedPub: Pub = await response.json();
+      onPubUpdated(updatedPub);
+      setSuccess(`Declined invite to "${updatedPub.name}".`);
     } catch (err: any) {
       setError(err.message || "An error occurred.");
     }
@@ -1580,6 +1605,50 @@ export default function PubHub({
         </div>
       )}
 
+      {/* Pending Pub invites - surfaced up front with Accept/Decline, same pattern as
+          a friend request, instead of just quietly sitting in the pub switcher below
+          waiting for someone to notice the dashed envelope card and hunt for "Join". */}
+      {myInvites.length > 0 && (
+        <div className="bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-900/50 rounded-2xl p-3 space-y-2">
+          <p className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+            ✉️ Pub Invite{myInvites.length === 1 ? "" : "s"} ({myInvites.length})
+          </p>
+          <div className="space-y-1.5">
+            {myInvites.map((p) => (
+              <div
+                key={p.id}
+                className="flex items-center gap-2.5 p-2 bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 rounded-xl"
+              >
+                <div
+                  className="flex items-center gap-2 min-w-0 flex-1 cursor-pointer"
+                  onClick={() => handleSelectPub(p.id)}
+                >
+                  <PubEmblem emblem={p.emblem} sizeClass="w-8 h-8 text-base shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-extrabold text-slate-800 dark:text-slate-100 truncate">{p.name}</p>
+                    <p className="text-[10px] text-slate-400 truncate">Host: @{p.owner}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleJoinPub(p.id)}
+                  title="Accept"
+                  className="p-2 bg-emerald-500 hover:bg-emerald-400 text-white rounded-xl transition-all cursor-pointer shrink-0"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => handleDeclinePubInvite(p.id)}
+                  title="Decline"
+                  className="p-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl transition-all cursor-pointer shrink-0"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Pub switcher - horizontal cards instead of a dropdown, so you can actually see
           what you're picking between instead of reading option text one at a time */}
       <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar pb-0.5 -mx-0.5 px-0.5">
@@ -1663,7 +1732,24 @@ export default function PubHub({
 
           <div className="flex items-center gap-1.5 shrink-0">
             {activePub && !activePub.members.includes(currentUser) ? (
-              activePub.isPrivate && !myInvites.some((p) => p.id === activePub.id) ? (
+              myInvites.some((p) => p.id === activePub.id) ? (
+                <>
+                  <button
+                    onClick={() => handleJoinPub(activePub.id)}
+                    title="Accept invite"
+                    className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-white font-black text-[11px] uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-xs flex items-center gap-1 shrink-0"
+                  >
+                    <Check className="w-3.5 h-3.5" /> Accept
+                  </button>
+                  <button
+                    onClick={() => handleDeclinePubInvite(activePub.id)}
+                    title="Decline invite"
+                    className="p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 rounded-xl transition-all cursor-pointer w-[32px] h-[32px] flex items-center justify-center shrink-0"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </>
+              ) : activePub.isPrivate ? (
                 <span
                   title="This Pub is private - you need an invite from the owner to join."
                   className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 font-black text-[11px] uppercase tracking-wider rounded-xl flex items-center gap-1 shrink-0 cursor-not-allowed"
@@ -1792,7 +1878,7 @@ export default function PubHub({
 
               {activePub && isInviting && (
                 <div className="p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2">
-                  <p className="text-xs font-extrabold text-slate-800 dark:text-slate-200">Invite Friends to {activePub.name}:</p>
+                  <p className="text-xs font-extrabold text-slate-800 dark:text-slate-200">Invite Members to {activePub.name}:</p>
                   <div className="max-h-32 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-1.5 custom-scrollbar">
                     {otherUsers
                       .filter(u => !activePub.members.includes(u.username) && !activePub.invited.includes(u.username))
@@ -2455,7 +2541,7 @@ export default function PubHub({
 
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
-                      Invite Mates (Optional)
+                      Invite Members (Optional)
                     </label>
                     <div className="border border-slate-800/80 rounded-xl p-1.5 bg-slate-950 max-h-28 overflow-y-auto grid grid-cols-1 gap-1">
                       {otherUsers.map((u) => {
@@ -2488,6 +2574,128 @@ export default function PubHub({
                     className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 active:scale-[0.98] text-slate-950 font-black text-xs sm:text-sm uppercase tracking-wider rounded-xl shadow-lg hover:shadow-amber-500/10 transition-all flex items-center justify-center gap-1 cursor-pointer mt-2"
                   >
                     {submitting ? "Establishing Pub..." : "Establish Pub 🍻"}
+                  </button>
+                </form>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal to Edit Pub Details (name/emblem) - privacy has its own toggle button
+          in the action row, and inviting members has its own dedicated panel, so this
+          stays scoped to what handleUpdatePub actually submits. */}
+      <AnimatePresence>
+        {editingPubId && (
+          <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-[110] flex items-start sm:items-center justify-center overflow-y-auto p-3 sm:p-4 py-6 animate-in fade-in duration-200">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md shadow-2xl flex flex-col overflow-hidden max-h-[92dvh]"
+            >
+              <div className="flex items-center justify-between border-b border-slate-800/80 px-5 py-4 shrink-0">
+                <h3 className="font-extrabold text-slate-100 text-sm sm:text-base flex items-center gap-2">
+                  <Edit2 className="w-5 h-5 text-amber-500" />
+                  Edit Pub
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setEditingPubId(null)}
+                  className="p-1.5 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-slate-100 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="overflow-y-auto p-5 space-y-4 custom-scrollbar flex-1 min-h-0">
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleUpdatePub(editingPubId);
+                  }}
+                  className="space-y-4"
+                >
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
+                      Pub Name
+                    </label>
+                    <input
+                      type="text"
+                      value={editPubName}
+                      onChange={(e) => setEditPubName(e.target.value)}
+                      className="w-full px-3.5 py-2 text-sm bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:border-amber-500 text-slate-100 placeholder-slate-500 font-semibold"
+                      maxLength={35}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
+                      Pub Emblem
+                    </label>
+                    <div className="flex gap-2 mb-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditPubEmblemType("emoji")}
+                        className={`flex-1 py-1.5 px-2.5 text-[10px] font-black uppercase tracking-wider rounded-xl border flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                          editPubEmblemType === "emoji"
+                            ? "bg-amber-500/20 border-amber-500 text-amber-400 font-extrabold"
+                            : "bg-slate-950 border-slate-800 text-slate-500"
+                        }`}
+                      >
+                        <Smile className="w-3.5 h-3.5" /> Emoji
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditPubEmblemType("url")}
+                        className={`flex-1 py-1.5 px-2.5 text-[10px] font-black uppercase tracking-wider rounded-xl border flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                          editPubEmblemType === "url"
+                            ? "bg-amber-500/20 border-amber-500 text-amber-400 font-extrabold"
+                            : "bg-slate-950 border-slate-800 text-slate-500"
+                        }`}
+                      >
+                        <Image className="w-3.5 h-3.5" /> Picture URL
+                      </button>
+                    </div>
+
+                    {editPubEmblemType === "emoji" ? (
+                      <div className="grid grid-cols-8 sm:grid-cols-9 gap-1 p-1.5 bg-slate-950 border border-slate-800 rounded-xl max-h-32 overflow-y-auto custom-scrollbar">
+                        {[
+                          "🍺", "🍻", "🥂", "🍷", "🥃", "🍹", "🥤", "🍾", "🍕", "🍔", "🍟", "🌮", "🌯", "🥨", "🍖", "🥩", "🍗", "🌭", "🧀", "🍿", "🍳", "🥓", "🍩", "🍪", "🔥", "❤️", "🎉", "✨", "🌟", "👑", "🏰", "🎪", "🎯", "🎲", "🎰", "🎮", "🎸", "🥁", "🐉", "🦁", "🐺", "🐻", "🦅", "🦉", "🦖", "🦄", "🍀", "⚓", "🏴‍☠️", "🏴", "🚀", "🛸", "👾", "🤖", "👹", "💀", "💩"
+                        ].map((em) => (
+                          <button
+                            key={em}
+                            type="button"
+                            onClick={() => setEditPubEmoji(em)}
+                            className={`p-1 text-[13px] sm:text-base rounded hover:bg-slate-800 transition-all text-center flex items-center justify-center select-none cursor-pointer ${
+                              editPubEmoji === em ? "bg-amber-500/20 scale-110 border border-amber-500/30" : ""
+                            }`}
+                          >
+                            {em}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div>
+                        <input
+                          type="text"
+                          placeholder="https://images.unsplash.com/photo-..."
+                          value={editPubUrl}
+                          onChange={(e) => setEditPubUrl(e.target.value)}
+                          className="w-full px-3.5 py-2 text-sm bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:border-amber-500 text-slate-100 placeholder-slate-500 font-semibold"
+                        />
+                        <p className="text-[9px] text-slate-400 mt-1">Provide a direct web image path/link to set as your custom pub emblem.</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 active:scale-[0.98] text-slate-950 font-black text-xs sm:text-sm uppercase tracking-wider rounded-xl shadow-lg hover:shadow-amber-500/10 transition-all flex items-center justify-center gap-1 cursor-pointer mt-2"
+                  >
+                    {submitting ? "Saving..." : "Save Changes"}
                   </button>
                 </form>
               </div>

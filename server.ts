@@ -3907,22 +3907,49 @@ app.post("/api/pubs/:id/messages", async (req, res) => {
 
 // POST Create or Update Pub
 app.post("/api/pubs", async (req, res) => {
-  const { id, name, owner, members, invited, emblem, isPrivate } = req.body;
+  // The client's edit flow sends "pubId" (not "id") on an update - accept both so an
+  // edit actually targets the existing document instead of silently generating a new
+  // one every time (pubId = id || `pub-${Date.now()}` with id always undefined for
+  // an edit request meant every "update" was really creating an orphaned duplicate).
+  const { id, pubId: bodyPubId, name, owner, members, invited, emblem, isPrivate, currentUser } = req.body;
+  const resolvedId = (id || bodyPubId || "").toString().trim() || undefined;
 
   if (!name || !owner) {
     res.status(400).json({ error: "Pub name and owner are required." });
     return;
   }
 
-  const pubId = id || `pub-${Date.now()}`;
+  let existingPub: Pub | undefined;
+  if (resolvedId) {
+    const allPubsList = await getAllPubs();
+    existingPub = allPubsList.find((p) => p.id === resolvedId);
+    if (!existingPub) {
+      res.status(404).json({ error: "Pub not found." });
+      return;
+    }
+    // Only the owner can edit an existing Pub's details.
+    const requester = (currentUser || owner || "").toString().trim();
+    const isOwner = existingPub.owner.toLowerCase().trim() === requester.toLowerCase().trim();
+    if (!isOwner && !isSeymoreBeers(requester)) {
+      res.status(403).json({ error: "Only the Pub's owner can edit its details." });
+      return;
+    }
+  }
+
+  const pubId = resolvedId || `pub-${Date.now()}`;
+  // On an update, any field this request doesn't explicitly include falls back to the
+  // existing Pub's value rather than a bare default - savePub()/setDoc() replaces the
+  // whole document, so previously omitting members/invited/widgets here would have
+  // silently reset a pub's roster and custom widgets on a simple name/emblem edit.
   const pub: Pub = {
     id: pubId,
     name,
-    owner,
-    members: members || [owner],
-    invited: invited || [],
-    emblem: emblem || "",
-    isPrivate: !!isPrivate
+    owner: existingPub ? existingPub.owner : owner,
+    members: members || (existingPub ? existingPub.members : [owner]),
+    invited: invited || (existingPub ? existingPub.invited : []),
+    emblem: emblem !== undefined ? emblem : (existingPub ? existingPub.emblem : ""),
+    isPrivate: isPrivate !== undefined ? !!isPrivate : !!existingPub?.isPrivate,
+    ...(existingPub?.widgets ? { widgets: existingPub.widgets } : {}),
   };
 
   const saved = await savePub(pub);
@@ -3994,6 +4021,31 @@ app.post("/api/pubs/:id/join", async (req, res) => {
     });
   }
 
+  res.json(saved);
+});
+
+// POST Decline Pub Invite - the other half of a pub invite acting like a friend
+// request: accepting is just joining (above), declining removes the invite without
+// ever making the person a member.
+app.post("/api/pubs/:id/decline", async (req, res) => {
+  const { id } = req.params;
+  const username = (req.body.username || req.body.user || "").toString().trim();
+
+  if (!username) {
+    res.status(400).json({ error: "Username is required to decline an invite." });
+    return;
+  }
+
+  const allPubsList = await getAllPubs();
+  const pub = allPubsList.find((p) => p.id === id);
+  if (!pub) {
+    res.status(404).json({ error: "Pub not found" });
+    return;
+  }
+
+  const usernameLower = username.toLowerCase().trim();
+  pub.invited = (pub.invited || []).filter((u) => u.toLowerCase().trim() !== usernameLower);
+  const saved = await savePub(pub);
   res.json(saved);
 });
 
