@@ -1388,30 +1388,34 @@ export default function Statistics({
             </div>
           </div>
 
-          {/* Compact Graph Key / Legend - capped to the users actually plotted */}
+          {/* Compact Graph Key / Legend - capped to the users actually plotted. A fixed-
+              column grid instead of flex-wrap, so it reads as an organized key instead
+              of a ragged wrap where only one or two wide name pills fit per row. */}
           {topGraphUsers.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-slate-50/80 border border-slate-200/70 rounded-lg">
-              <span className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 mr-0.5 pl-1">Key:</span>
-              {topGraphUsers.map((user, index) => {
-                const color = COLORS[index % COLORS.length];
-                const userPintsCount = filteredLogs.filter(l => l.user === user).length;
-                return (
-                  <div
-                    key={user}
-                    className="flex items-center gap-1.5 px-2 py-0.5 bg-white border border-slate-200/80 rounded-md text-[11px] font-medium text-slate-700 shadow-2xs"
-                  >
-                    <span
-                      className="w-2 h-2 rounded-full shrink-0"
-                      style={{ backgroundColor: color }}
-                    />
-                    <UserAvatar username={user} users={filteredUsers} className="w-4 h-4 text-[9px] shrink-0" />
-                    <span className="font-bold text-slate-800">{user}</span>
-                    <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-1 py-0.2 rounded">
-                      {userPintsCount}
-                    </span>
-                  </div>
-                );
-              })}
+            <div className="p-1.5 bg-slate-50/80 border border-slate-200/70 rounded-lg space-y-1">
+              <span className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 pl-1">Key</span>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                {topGraphUsers.map((user, index) => {
+                  const color = COLORS[index % COLORS.length];
+                  const userPintsCount = filteredLogs.filter(l => l.user === user).length;
+                  return (
+                    <div
+                      key={user}
+                      className="flex items-center gap-1.5 px-2 py-1 bg-white border border-slate-200/80 rounded-md text-[11px] font-medium text-slate-700 shadow-2xs min-w-0"
+                    >
+                      <span
+                        className="w-2 h-2 rounded-full shrink-0"
+                        style={{ backgroundColor: color }}
+                      />
+                      <UserAvatar username={user} users={filteredUsers} className="w-4 h-4 text-[9px] shrink-0" />
+                      <span className="font-bold text-slate-800 truncate min-w-0 flex-1">{user}</span>
+                      <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-1 py-0.2 rounded shrink-0">
+                        {userPintsCount}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
