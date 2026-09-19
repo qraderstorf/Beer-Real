@@ -100,6 +100,7 @@ export interface PubChatMessage {
   user: string;
   text: string;
   date: string;
+  reactions?: Record<string, string[]>; // e.g. { horse: ["Alex", "Sam"] } - used for beacon "I'm coming by..." replies
 }
 
 export interface ContentReport {

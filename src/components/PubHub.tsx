@@ -105,6 +105,22 @@ interface PubChatSectionProps {
   messageRefreshKey?: number;
 }
 
+// "How are you getting here?" reactions for beacon calls - keys match what the server
+// maps to a friendly label for notifications. Horse fits the Lord of the Rings "the
+// beacons are lit" reference the whole feature is already named after.
+const BEACON_TRAVEL_REACTIONS: { key: string; emoji: string; label: string }[] = [
+  { key: "horse", emoji: "🐎", label: "Horse" },
+  { key: "car", emoji: "🚗", label: "Driving" },
+  { key: "bus", emoji: "🚌", label: "Bus" },
+  { key: "taxi", emoji: "🚕", label: "Taxi" },
+  { key: "bike", emoji: "🚲", label: "Bike" },
+  { key: "running", emoji: "🏃", label: "Running" },
+  { key: "walking", emoji: "🚶", label: "Walking" },
+  { key: "flying", emoji: "✈️", label: "Flying" },
+  { key: "here", emoji: "📍", label: "Already Here" },
+  { key: "cant_make_it", emoji: "❌", label: "Can't Make It" },
+];
+
 function PubChatSection({
   pubId,
   pubName,
@@ -118,7 +134,38 @@ function PubChatSection({
   const [inputText, setInputText] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [openPickerMsgId, setOpenPickerMsgId] = useState<string | null>(null);
   const chatContainerRef = React.useRef<HTMLDivElement | null>(null);
+
+  const handleToggleMessageReaction = async (messageId: string, reactionKey: string) => {
+    setOpenPickerMsgId(null);
+    // Optimistic update so it feels instant, same as the beer-post reaction picker.
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (m.id !== messageId) return m;
+        const reactions = { ...(m.reactions || {}) };
+        const list = reactions[reactionKey] ? [...reactions[reactionKey]] : [];
+        const idx = list.indexOf(currentUser);
+        if (idx === -1) list.push(currentUser);
+        else list.splice(idx, 1);
+        reactions[reactionKey] = list;
+        return { ...m, reactions };
+      })
+    );
+    try {
+      const res = await fetch(`/api/pubs/${encodeURIComponent(pubId)}/messages/${encodeURIComponent(messageId)}/react`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: currentUser, reactionType: reactionKey })
+      });
+      if (res.ok) {
+        const updated: PubChatMessage = await res.json();
+        setMessages((prev) => prev.map((m) => (m.id === messageId ? updated : m)));
+      }
+    } catch (err) {
+      console.error("Failed to toggle message reaction:", err);
+    }
+  };
 
   const fetchMessages = async () => {
     if (!pubId) return;
@@ -215,6 +262,8 @@ function PubChatSection({
             const isMe = msg.user.toLowerCase() === currentUser.toLowerCase();
             const isOwner = msg.user.toLowerCase() === pubOwner.toLowerCase();
             const timeStr = msg.date ? new Date(msg.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+            const isBeaconMsg = msg.text?.includes("BEACONS ARE LIT");
+            const activeReactions = BEACON_TRAVEL_REACTIONS.filter((r) => (msg.reactions?.[r.key]?.length || 0) > 0);
 
             return (
               <div
@@ -230,7 +279,7 @@ function PubChatSection({
 
                 <div className={`max-w-[85%] space-y-1 ${isMe ? "items-end text-right" : "items-start"}`}>
                   <div className={`flex items-center gap-1.5 text-[10px] ${isMe ? "justify-end text-slate-400" : "text-slate-400"}`}>
-                    <span 
+                    <span
                       onClick={() => onViewProfileRequested?.(msg.user)}
                       className="font-extrabold text-slate-300 hover:text-amber-400 hover:underline cursor-pointer flex items-center gap-1"
                     >
@@ -250,6 +299,60 @@ function PubChatSection({
                   >
                     {msg.text}
                   </div>
+
+                  {isBeaconMsg && (
+                    <div className={`flex flex-wrap items-center gap-1 ${isMe ? "justify-end" : "justify-start"}`}>
+                      {activeReactions.map((r) => {
+                        const reactors = msg.reactions?.[r.key] || [];
+                        const reacted = reactors.includes(currentUser);
+                        return (
+                          <button
+                            key={r.key}
+                            type="button"
+                            onClick={() => handleToggleMessageReaction(msg.id, r.key)}
+                            title={`${r.label}: ${reactors.join(", ")}`}
+                            className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 border transition-all cursor-pointer ${
+                              reacted
+                                ? "bg-amber-500/20 border-amber-500 text-amber-300"
+                                : "bg-slate-800/60 border-slate-700 text-slate-300 hover:border-slate-600"
+                            }`}
+                          >
+                            <span>{r.emoji}</span>
+                            <span>{reactors.length}</span>
+                          </button>
+                        );
+                      })}
+                      <button
+                        type="button"
+                        onClick={() => setOpenPickerMsgId(openPickerMsgId === msg.id ? null : msg.id)}
+                        title="Let them know you're coming"
+                        className="w-5 h-5 rounded-full bg-slate-800/60 border border-slate-700 text-slate-400 hover:text-amber-400 hover:border-amber-500/50 flex items-center justify-center transition-all cursor-pointer shrink-0"
+                      >
+                        <Plus className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
+
+                  {isBeaconMsg && openPickerMsgId === msg.id && (
+                    <div className={`flex flex-wrap gap-1 p-1.5 bg-slate-800/90 border border-slate-700 rounded-xl max-w-[220px] ${isMe ? "justify-end ml-auto" : "justify-start"}`}>
+                      {BEACON_TRAVEL_REACTIONS.map((r) => {
+                        const reacted = (msg.reactions?.[r.key] || []).includes(currentUser);
+                        return (
+                          <button
+                            key={r.key}
+                            type="button"
+                            onClick={() => handleToggleMessageReaction(msg.id, r.key)}
+                            title={r.label}
+                            className={`px-1.5 py-1 rounded-lg text-sm flex items-center justify-center transition-all cursor-pointer ${
+                              reacted ? "bg-amber-500/25 ring-1 ring-amber-500" : "hover:bg-slate-700/60"
+                            }`}
+                          >
+                            {r.emoji}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             );

@@ -3905,6 +3905,83 @@ app.post("/api/pubs/:id/messages", async (req, res) => {
   }
 });
 
+// POST Toggle a reaction on a pub chat message - built for beacon calls ("I'm coming
+// by horse/car/bus/...!") but works on any message in the thread.
+app.post("/api/pubs/:pubId/messages/:messageId/react", async (req, res) => {
+  const { pubId, messageId } = req.params;
+  const username = (req.body.username || req.body.user || "").toString().trim();
+  const { reactionType } = req.body;
+
+  if (!username) {
+    res.status(400).json({ error: "Username is required to react" });
+    return;
+  }
+  if (!reactionType) {
+    res.status(400).json({ error: "Reaction type is required" });
+    return;
+  }
+
+  const messages = await getPubMessages(pubId);
+  const msg = messages.find((m) => m.id === messageId);
+  if (!msg) {
+    res.status(404).json({ error: "Message not found" });
+    return;
+  }
+
+  if (!msg.reactions || typeof msg.reactions !== "object") msg.reactions = {};
+  if (!msg.reactions[reactionType] || !Array.isArray(msg.reactions[reactionType])) {
+    msg.reactions[reactionType] = [];
+  }
+
+  const idx = msg.reactions[reactionType].indexOf(username);
+  const isAdding = idx === -1;
+  if (isAdding) {
+    msg.reactions[reactionType].push(username);
+  } else {
+    msg.reactions[reactionType].splice(idx, 1);
+  }
+
+  const saved = await savePubChatMessage(msg);
+
+  // Let the message's author know someone's responding, same as reacting to a post -
+  // but only on adding a reaction, not removing one (nobody needs a notification for
+  // "they changed their mind").
+  if (isAdding && msg.user.toLowerCase().trim() !== username.toLowerCase().trim()) {
+    try {
+      const allPubsList = await getAllPubs();
+      const pub = allPubsList.find((p) => p.id === pubId);
+      const safePubName = escapeHtml(pub?.name || "the Pub");
+      const travelLabels: Record<string, string> = {
+        horse: "🐎 Horse",
+        car: "🚗 Driving",
+        bus: "🚌 Bus",
+        taxi: "🚕 Taxi",
+        bike: "🚲 Bike",
+        running: "🏃 Running",
+        walking: "🚶 Walking",
+        flying: "✈️ Flying",
+        here: "📍 Already Here",
+        cant_make_it: "❌ Can't Make It",
+      };
+      const label = travelLabels[reactionType] || escapeHtml(String(reactionType));
+      const isDecline = reactionType === "cant_make_it";
+      await createAndDispatchNotification({
+        idPrefix: "notif-beacon-react",
+        user: username,
+        targetUser: msg.user,
+        text: isDecline
+          ? `won't make it to your call in <strong>${safePubName}</strong>. ${label}`
+          : `is coming to your call in <strong>${safePubName}</strong>: <strong>${label}</strong>! 🍻`,
+        type: "reaction",
+      });
+    } catch (notifErr) {
+      console.error("Failed to generate beacon reaction notification:", notifErr);
+    }
+  }
+
+  res.json(saved);
+});
+
 // POST Create or Update Pub
 app.post("/api/pubs", async (req, res) => {
   // The client's edit flow sends "pubId" (not "id") on an update - accept both so an
