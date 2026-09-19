@@ -1367,12 +1367,18 @@ export default function ActivityFeed({
                               button is always visible and is the one discovery point for every reaction type, used or not. */}
                           <div className="flex flex-wrap items-center gap-1 min-w-0">
                             {/* Preset Buttons - hidden until at least one person has used them, except
-                                FOMO Alert which stays visible always: otherwise nobody could ever be the
-                                first to use it since the button that starts it off would never appear. */}
-                            {presets.filter((react) => react.key === "fomo" || getReactionList(log, react.key).length > 0).map((react) => {
+                                FOMO Alert and Imposter which stay visible always: otherwise nobody
+                                could ever be the first to use them since the button that starts it
+                                off would never appear. Unused, those two collapse to icon-only (no
+                                label, tighter padding) so having two permanent pills instead of one
+                                doesn't bulk out the row - they expand to a normal labeled pill the
+                                moment someone actually reacts. */}
+                            {presets.filter((react) => react.key === "fomo" || react.key === "dislike" || getReactionList(log, react.key).length > 0).map((react) => {
                               const reactorList = getReactionList(log, react.key);
                               const hasReacted = reactorList.includes(currentUser);
                               const count = reactorList.length;
+                              const isAlwaysVisible = react.key === "fomo" || react.key === "dislike";
+                              const isIdle = isAlwaysVisible && count === 0;
 
                               return (
                                 <div key={react.key} className="relative group shrink-0">
@@ -1383,14 +1389,17 @@ export default function ActivityFeed({
                                       e.stopPropagation();
                                       handleReact(log.id, react.key);
                                     }}
-                                    className={`flex items-center gap-1 py-0.5 px-2 rounded-full text-[9px] font-extrabold border transition-all duration-150 active:scale-95 hover:scale-105 cursor-pointer select-none ${
+                                    title={isIdle ? react.label : undefined}
+                                    className={`flex items-center gap-1 rounded-full text-[9px] font-extrabold border transition-all duration-150 active:scale-95 hover:scale-105 cursor-pointer select-none ${
+                                      isIdle ? "py-0.5 px-1.5" : "py-0.5 px-2"
+                                    } ${
                                       hasReacted
                                         ? `${react.activeClass} font-black`
                                         : react.unselectedClass
                                     }`}
                                   >
                                     <span className="text-[11px]">{react.emoji}</span>
-                                    <span className="text-[9px] font-bold">{react.label}</span>
+                                    {!isIdle && <span className="text-[9px] font-bold">{react.label}</span>}
                                     {count > 0 && (
                                       <span className={`ml-0.5 px-1 py-0.5 rounded-full text-[8px] font-black leading-none ${
                                         hasReacted ? "bg-black/25 text-white" : "bg-black/10 dark:bg-white/10 text-current"
