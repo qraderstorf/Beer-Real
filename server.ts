@@ -379,6 +379,48 @@ app.post("/api/upload-image", async (req, res) => {
   }
 });
 
+// Turns a GPS coordinate into a rough place name for the "Use my location" button -
+// proxied through the server (rather than called from the client) so the required
+// identifying User-Agent and request pattern stay compliant with Nominatim's usage
+// policy in one place, not scattered across every client. Free, no API key, no
+// billing account - the tradeoff against a real Places lookup is a best-effort name
+// (nearest venue/business if one is tagged at that spot, otherwise neighborhood/city),
+// not a verified, precise venue picker.
+app.get("/api/reverse-geocode", async (req, res) => {
+  const lat = parseFloat((req.query.lat || "").toString());
+  const lng = parseFloat((req.query.lng || "").toString());
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    res.status(400).json({ error: "Valid lat and lng query params are required." });
+    return;
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 6000);
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=17&addressdetails=1`;
+    const response = await fetch(url, {
+      headers: { "User-Agent": "BeerReel/1.0 (beer check-in app; contact via app support)" },
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      res.json({ name: null });
+      return;
+    }
+    const data: any = await response.json();
+    const addr = data.address || {};
+    // Prefer a specific venue (bar/pub/restaurant) if the coordinate lands on one,
+    // otherwise fall back to a neighborhood/city-level description.
+    const venue = addr.pub || addr.bar || addr.restaurant || addr.cafe || addr.amenity || data.name;
+    const cityLike = addr.suburb || addr.neighbourhood || addr.city || addr.town || addr.village;
+    res.json({ name: venue || cityLike || null });
+  } catch (err) {
+    console.warn("[Reverse Geocode] Failed:", err);
+    res.json({ name: null });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+});
+
 // --- FIRESTORE PERSISTENCE ---
 let db: any = null;
 let useFirestore = false;
@@ -2673,7 +2715,7 @@ app.post("/api/beers", async (req, res) => {
   try {
     const rawUser = (req.body.user || "Anonymous").toString().trim();
     const user = rawUser || "Anonymous";
-    const { beerName, beerStyle, abv, date, rating, comment, imageUrl, hadCig, pubId, timezone } = req.body;
+    const { beerName, beerStyle, abv, date, rating, comment, imageUrl, hadCig, pubId, timezone, location } = req.body;
 
     if (!user || !beerName || !beerStyle || abv === undefined || !date || rating === undefined) {
       res.status(400).json({ error: "Missing required fields" });
@@ -2703,7 +2745,8 @@ app.post("/api/beers", async (req, res) => {
       imageUrl: processedImageUrl,
       hadCig: !!hadCig,
       pubId: pubId || undefined,
-      timezone: isValidTimeZone(timezone) ? timezone : undefined
+      timezone: isValidTimeZone(timezone) ? timezone : undefined,
+      location: (typeof location === "string" && location.trim()) ? location.trim().slice(0, 100) : undefined
     };
 
     const saved = await saveBeerLog(newLog);
@@ -2813,7 +2856,7 @@ app.post("/api/beers", async (req, res) => {
 app.post("/api/beers/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { beerName, beerStyle, abv, rating, comment, hadCig, currentUser } = req.body;
+    const { beerName, beerStyle, abv, rating, comment, hadCig, currentUser, location } = req.body;
     const requester = (currentUser || req.query.currentUser || req.headers["x-current-user"] || "").toString();
 
     let log = await findBeerLogById(id);
@@ -2840,6 +2883,7 @@ app.post("/api/beers/:id", async (req, res) => {
     if (rating !== undefined) log.rating = clampRating(Number(rating));
     if (comment !== undefined) log.comment = comment;
     if (hadCig !== undefined) log.hadCig = !!hadCig;
+    if (location !== undefined) log.location = (typeof location === "string" && location.trim()) ? location.trim().slice(0, 100) : undefined;
 
     await saveBeerLog(log);
 

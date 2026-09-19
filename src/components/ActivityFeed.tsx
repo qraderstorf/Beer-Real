@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
-import { Star, MessageSquare, Flame, Trash2, Heart, Search, Filter, Award, RefreshCw, Edit, Camera, Siren, Plus, Smile, Pin, X, Flag } from "lucide-react";
+import { Star, MessageSquare, Flame, Trash2, Heart, Search, Filter, Award, RefreshCw, Edit, Camera, Siren, Plus, Smile, Pin, X, Flag, MapPin } from "lucide-react";
 import { BeerLog, UserProfile, isSeymoreBeers, Pub } from "../types";
 import { useRetryImage } from "../utils";
 import UserAvatar from "./UserAvatar";
@@ -1270,6 +1270,12 @@ export default function ActivityFeed({
                                   {log.abv.toFixed(1)}% ABV
                                 </span>
                               )}
+                              {log.location && (
+                                <span className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-2.5 py-0.5 rounded-md text-[10px] font-bold">
+                                  <MapPin className="w-2.5 h-2.5 shrink-0" />
+                                  {log.location}
+                                </span>
+                              )}
                             </div>
                           </>
                         ) : (
@@ -1277,6 +1283,12 @@ export default function ActivityFeed({
                             {log.abv > 0 && (
                               <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase">
                                 {log.abv.toFixed(1)}% ABV
+                              </span>
+                            )}
+                            {log.location && (
+                              <span className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-2.5 py-0.5 rounded-md text-[10px] font-bold">
+                                <MapPin className="w-2.5 h-2.5 shrink-0" />
+                                {log.location}
                               </span>
                             )}
                           </div>

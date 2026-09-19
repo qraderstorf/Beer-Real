@@ -24,6 +24,7 @@ export interface BeerLog {
   isFirstOfDay?: boolean; // first pint logged by anyone, that calendar day
   isNewStyle?: boolean; // first time this user has logged this beerStyle
   timezone?: string; // IANA timezone (e.g. "America/New_York") of the poster's device at check-in time
+  location?: string; // free-text place name - either typed, or filled from "Use my location" (reverse-geocoded)
 }
 
 export interface UserProfile {

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Camera, Star, X, Check, Loader2, Award, Percent, MessageSquare, RefreshCw, Sparkles, Plus, History, RotateCcw } from "lucide-react";
+import { Camera, Star, X, Check, Loader2, Award, Percent, MessageSquare, RefreshCw, Sparkles, Plus, History, RotateCcw, MapPin, LocateFixed, ChevronDown } from "lucide-react";
 import { BeerLog, UserProfile } from "../types";
 import { PRELOADED_BEERS, PreloadedBeer, normalizeBeerName, searchBeers } from "../data/beerCatalog";
 import { compressAndResizeImage } from "../utils";
@@ -42,6 +42,10 @@ export default function QuickLogWorkflow({
   const [rating, setRating] = useState<number>(0);
   const [comment, setComment] = useState("");
   const [hadCig, setHadCig] = useState(false);
+  const [location, setLocation] = useState("");
+  const [isLocating, setIsLocating] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [showMoreDetails, setShowMoreDetails] = useState(false);
 
   // Autocomplete state
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -114,6 +118,8 @@ export default function QuickLogWorkflow({
         setRating(editLog.rating || 0);
         setComment(editLog.comment || "");
         setHadCig(!!editLog.hadCig);
+        setLocation(editLog.location || "");
+        setShowMoreDetails(!!(editLog.abv > 0 || editLog.hadCig));
         setStep("enrich");
       } else {
         // Step 1: Trigger camera automatically on open!
@@ -135,6 +141,9 @@ export default function QuickLogWorkflow({
     setRating(0);
     setComment("");
     setHadCig(false);
+    setLocation("");
+    setLocationError(null);
+    setShowMoreDetails(false);
     setError(null);
   };
 
@@ -199,6 +208,42 @@ export default function QuickLogWorkflow({
     return imageStr;
   };
 
+  // "Use my location" - free device geolocation, then a best-effort free reverse
+  // lookup (proxied through the server) to turn it into a place name. Never blocks
+  // posting: on denial/failure it just leaves the box empty for manual typing.
+  const handleUseMyLocation = () => {
+    setLocationError(null);
+    if (!navigator.geolocation) {
+      setLocationError("Location isn't available on this device.");
+      return;
+    }
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const { latitude, longitude } = pos.coords;
+          const res = await fetch(`/api/reverse-geocode?lat=${latitude}&lng=${longitude}`);
+          const data = res.ok ? await res.json() : null;
+          if (data?.name) {
+            setLocation(data.name);
+          } else {
+            setLocationError("Couldn't figure out a place name - type it in instead.");
+          }
+        } catch (err) {
+          console.error("[QuickLogWorkflow] Reverse geocode error:", err);
+          setLocationError("Couldn't look up your location.");
+        } finally {
+          setIsLocating(false);
+        }
+      },
+      () => {
+        setIsLocating(false);
+        setLocationError("Location permission denied - type it in instead.");
+      },
+      { timeout: 8000, maximumAge: 60000 }
+    );
+  };
+
   // Step 2: Instant Post!
   const handleInstantPost = async () => {
     if (!capturedPhoto) {
@@ -229,6 +274,7 @@ export default function QuickLogWorkflow({
       date: new Date().toISOString(),
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       pubId: selectedPubId && selectedPubId !== "global" && selectedPubId !== "all" ? selectedPubId : undefined,
+      location: location.trim() || undefined,
     };
 
     const controller = new AbortController();
@@ -294,6 +340,7 @@ export default function QuickLogWorkflow({
         date: new Date().toISOString(),
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         pubId: selectedPubId && selectedPubId !== "global" && selectedPubId !== "all" ? selectedPubId : undefined,
+        location: location.trim() || undefined,
       };
 
       try {
@@ -328,6 +375,7 @@ export default function QuickLogWorkflow({
       rating: rating,
       comment: comment.trim(),
       hadCig: hadCig,
+      location: location.trim() || undefined,
     };
 
     try {
@@ -608,6 +656,33 @@ export default function QuickLogWorkflow({
                   </div>
                 )}
 
+                {/* Subtle, fully optional location box - type it, or one tap to use device location */}
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 rounded-full">
+                    <MapPin className="w-3.5 h-3.5 shrink-0 opacity-70 text-slate-500" />
+                    <input
+                      type="text"
+                      autoComplete="off"
+                      placeholder="Where are you? (optional)"
+                      value={location}
+                      onChange={(e) => setLocation(e.target.value)}
+                      className="flex-1 min-w-0 bg-transparent border-0 text-xs text-slate-600 dark:text-slate-300 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleUseMyLocation}
+                      disabled={isLocating}
+                      title="Use my location"
+                      className="shrink-0 p-1 rounded-full text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      {isLocating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LocateFixed className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                  {locationError && (
+                    <p className="text-[10px] text-red-500 dark:text-red-400 px-1">{locationError}</p>
+                  )}
+                </div>
+
                 {/* Single main instant post button */}
                 <button
                   onClick={handleInstantPost}
@@ -720,30 +795,9 @@ export default function QuickLogWorkflow({
                     </div>
                   )}
 
-                  {/* Popular Catalog Chips */}
-                  <div className="mt-1.5 flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
-                    <span className="text-[10px] text-slate-400 font-bold shrink-0">Popular:</span>
-                    {[
-                      { name: "Guinness Draught", style: "Stout", abv: "4.2" },
-                      { name: "Modelo Especial", style: "Lager", abv: "4.4" },
-                      { name: "Estrella Galicia", style: "Lager", abv: "5.5" },
-                      { name: "Pacifico Clara", style: "Lager", abv: "4.5" },
-                      { name: "Firestone Walker 805", style: "Lager", abv: "4.7" },
-                      { name: "Blue Moon Belgian White", style: "Wheat", abv: "5.4" },
-                      { name: "Heady Topper", style: "IPA", abv: "8.0" }
-                    ].map((chip) => (
-                      <button
-                        key={chip.name}
-                        type="button"
-                        onClick={() => selectSuggestion(chip)}
-                        className="shrink-0 px-2 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[11px] font-bold rounded-md border border-slate-200 dark:border-slate-700 transition-all flex items-center gap-1 cursor-pointer"
-                      >
-                        <span>🍺</span>
-                        <span>{chip.name.split(" ")[0]}</span>
-                        <span className="text-[9px] opacity-75">{chip.abv}%</span>
-                      </button>
-                    ))}
-                  </div>
+                  {/* Popular beers row removed - the dropdown above already shows "Popular
+                      Catalog Beers" the moment you focus the input while it's empty, so a
+                      second, always-visible popular-chips row was just repeating it. */}
 
                   {isAutofilled && (
                     <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold mt-1.5 flex items-center gap-1 animate-pulse">
@@ -752,49 +806,88 @@ export default function QuickLogWorkflow({
                   )}
                 </div>
 
-                {/* 2. Rating Star scale */}
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
-                    How creamy is this pint?
-                  </label>
-                  <div className="flex flex-col items-center gap-2 p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl">
-                    <div className="flex items-center gap-1.5">
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <button
-                          key={star}
-                          type="button"
-                          onClick={() => setRating(star)}
-                          className="p-1 focus:outline-none transition-transform active:scale-90"
-                        >
-                          <Star
-                            className={`w-7 h-7 transition-all ${
-                              star <= rating
-                                ? "fill-amber-400 text-amber-400 scale-110"
-                                : "text-slate-300 dark:text-slate-700"
-                            }`}
-                          />
-                        </button>
-                      ))}
+                {/* 2. Rating Star scale - only when this screen is the sole chance to rate:
+                    editing an existing log, or the no-photo manual-log path where Preview
+                    (which already has its own rating row) never ran. If a photo was just
+                    instant-posted, rating was already collected on Preview - asking again
+                    here would just be the same question twice. */}
+                {(editLog || !activeLog) && (
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+                      How creamy is this pint?
+                    </label>
+                    <div className="flex flex-col items-center gap-2 p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl">
+                      <div className="flex items-center gap-1.5">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <button
+                            key={star}
+                            type="button"
+                            onClick={() => setRating(star)}
+                            className="p-1 focus:outline-none transition-transform active:scale-90"
+                          >
+                            <Star
+                              className={`w-7 h-7 transition-all ${
+                                star <= rating
+                                  ? "fill-amber-400 text-amber-400 scale-110"
+                                  : "text-slate-300 dark:text-slate-700"
+                              }`}
+                            />
+                          </button>
+                        ))}
+                      </div>
+                      {rating > 0 && (
+                        <span className="text-[11px] font-extrabold text-amber-500 uppercase tracking-wider">
+                          {rating === 5 && "Bad day to be a Beer 🏆"}
+                          {rating === 4 && "Thats a Creamy Pint! 👍"}
+                          {rating === 3 && "Solid pint. 👌"}
+                          {rating === 2 && "Flat and Warm but still a pint. 👎"}
+                          {rating === 1 && "Filled with Regret 🤮"}
+                        </span>
+                      )}
                     </div>
-                    {rating > 0 && (
-                      <span className="text-[11px] font-extrabold text-amber-500 uppercase tracking-wider">
-                        {rating === 5 && "Bad day to be a Beer 🏆"}
-                        {rating === 4 && "Thats a Creamy Pint! 👍"}
-                        {rating === 3 && "Solid pint. 👌"}
-                        {rating === 2 && "Flat and Warm but still a pint. 👎"}
-                        {rating === 1 && "Filled with Regret 🤮"}
-                      </span>
+                  </div>
+                )}
+
+                {/* 3. Location - same visibility rule as rating above: skip it here if it
+                    was already offered on Preview for this exact post. */}
+                {(editLog || !activeLog) && (
+                  <div className="space-y-1">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                      Where are you?
+                    </label>
+                    <div className="flex items-center gap-2 px-3.5 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl">
+                      <MapPin className="w-4 h-4 shrink-0 text-slate-400" />
+                      <input
+                        type="text"
+                        autoComplete="off"
+                        placeholder="Optional"
+                        value={location}
+                        onChange={(e) => setLocation(e.target.value)}
+                        className="flex-1 min-w-0 bg-transparent border-0 text-sm text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleUseMyLocation}
+                        disabled={isLocating}
+                        title="Use my location"
+                        className="shrink-0 p-1 rounded-full text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        {isLocating ? <Loader2 className="w-4 h-4 animate-spin" /> : <LocateFixed className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    {locationError && (
+                      <p className="text-[10px] text-red-500 dark:text-red-400 px-1">{locationError}</p>
                     )}
                   </div>
-                </div>
+                )}
 
-                {/* 3. Caption text field */}
+                {/* 4. Caption text field */}
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
                     Caption / Vibe notes
                   </label>
                   <textarea
-                    placeholder="Vibe notes, location, who are you with..."
+                    placeholder="Vibe notes, who are you with..."
                     rows={2}
                     value={comment}
                     onChange={(e) => setComment(e.target.value)}
@@ -802,42 +895,56 @@ export default function QuickLogWorkflow({
                   />
                 </div>
 
-                {/* 4. ABV - optional number field (collapsible / secondary) */}
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5 flex items-center justify-between">
-                    <span>ABV (%)</span>
-                    <span className="text-[9px] text-slate-400 normal-case font-medium">Optional, enter if known</span>
-                  </label>
-                  <div className="relative">
-                    <Percent className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-                    <input
-                      type="number"
-                      step="0.1"
-                      placeholder="e.g. 4.2"
-                      value={abv}
-                      onChange={(e) => setAbv(e.target.value)}
-                      className="w-full pl-9 pr-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/10 focus:border-amber-500 text-slate-800 dark:text-white"
-                    />
-                  </div>
-                </div>
-
-                {/* 5. Dart Combo - optional flag for stepping out for a dart (cigarette) with this pint */}
+                {/* 4/5. ABV + Dart Combo - the two fields people touch least often, tucked
+                    behind a closed-by-default disclosure instead of always taking up
+                    space. Opens automatically if editing a log that already has one set. */}
                 <div>
                   <button
                     type="button"
-                    onClick={() => setHadCig(!hadCig)}
-                    className={`w-full flex items-center justify-between gap-2 px-4 py-3 rounded-xl border text-sm font-bold transition-all cursor-pointer ${
-                      hadCig
-                        ? "bg-amber-500/10 border-amber-500 text-amber-600 dark:text-amber-400"
-                        : "bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-400"
-                    }`}
+                    onClick={() => setShowMoreDetails((v) => !v)}
+                    className="w-full flex items-center justify-between px-1 py-1 text-xs font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer"
                   >
-                    <span className="flex items-center gap-2">
-                      <span className="text-lg">🎯</span>
-                      Dart Combo Activated
-                    </span>
-                    {hadCig && <Check className="w-4 h-4" />}
+                    <span>More details {(abv || hadCig) && !showMoreDetails ? "(ABV, Dart Combo set)" : "(ABV, Dart Combo)"}</span>
+                    <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showMoreDetails ? "rotate-180" : ""}`} />
                   </button>
+
+                  {showMoreDetails && (
+                    <div className="mt-3 space-y-3">
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5 flex items-center justify-between">
+                          <span>ABV (%)</span>
+                          <span className="text-[9px] text-slate-400 normal-case font-medium">Optional, enter if known</span>
+                        </label>
+                        <div className="relative">
+                          <Percent className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                          <input
+                            type="number"
+                            step="0.1"
+                            placeholder="e.g. 4.2"
+                            value={abv}
+                            onChange={(e) => setAbv(e.target.value)}
+                            className="w-full pl-9 pr-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/10 focus:border-amber-500 text-slate-800 dark:text-white"
+                          />
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setHadCig(!hadCig)}
+                        className={`w-full flex items-center justify-between gap-2 px-4 py-3 rounded-xl border text-sm font-bold transition-all cursor-pointer ${
+                          hadCig
+                            ? "bg-amber-500/10 border-amber-500 text-amber-600 dark:text-amber-400"
+                            : "bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-400"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <span className="text-lg">🎯</span>
+                          Dart Combo Activated
+                        </span>
+                        {hadCig && <Check className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Action buttons (Skip vs Save) */}
